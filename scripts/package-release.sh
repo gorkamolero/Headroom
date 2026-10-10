@@ -82,9 +82,11 @@ Apple silicon Mac, macOS 13 or later, and a compatible display with HDR/EDR
 headroom. Actual compatibility varies by Mac, display, macOS version, and settings.
 
 INSTALL
-Move Headroom.app into Applications, then open it. Its black-sun control appears
-in the menu bar. It starts with boost OFF. Enable a supported display and move
-its slider. Disable boost or quit Headroom to restore its saved display settings.
+1. Unzip the download and drag Headroom.app into Applications.
+2. Open Headroom from Applications.
+3. Click the black sun in the menu bar. The app starts with boost OFF.
+4. Enable a supported display and adjust its slider. Switch off or quit to restore
+   its saved display settings.
 
 HOW IT WORKS
 A tiny, paused HDR carrier requests EDR headroom. A separate recovery helper
@@ -111,9 +113,19 @@ if [[ "$mode" == --beta ]]; then
 
 SIGNING STATUS
 This community beta has an ad-hoc signature. It is not Developer ID signed or
-notarized by Apple. macOS may prevent a downloaded copy from opening. Building
-from the accompanying source is recommended and requires no Apple Developer
-membership. Do not disable system security protections to install this beta.
+notarized by Apple. You can use the packaged app without compiling it or having
+an Apple Developer membership.
+
+IF MACOS BLOCKS THE FIRST OPEN
+If the message says the developer cannot be verified or Apple could not check
+the app:
+1. Dismiss the message and open System Settings > Privacy & Security.
+2. Under Security, click Open Anyway next to the message about Headroom.
+3. Authenticate if asked, then confirm Open.
+
+macOS remembers this exception for Headroom. If Open Anyway is missing, try
+opening Headroom from Applications again, then return to Privacy & Security.
+Apple's instructions: https://support.apple.com/102445
 BETA
 else
     cat >> "$payload/READ-ME.txt" <<'SIGNED'

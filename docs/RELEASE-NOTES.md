@@ -14,4 +14,14 @@ The recorded menu scale tests returned every original RGB table sample exactly a
 
 This is an early community beta for Apple Silicon. The build targets macOS 13 or later; live testing has covered an M5 Pro internal XDR display on macOS 27.0.1. Brightness in nits, color accuracy, sustained GPU use, and battery impact have not been measured. The maximum slider setting is a requested table scale, not a measured 2× brightness gain.
 
-This release includes source code and an ad-hoc signed beta ZIP, with SHA-256 checksums. It is not Developer ID signed or notarized, and macOS may block the downloaded app from opening. Building from source is the recommended route; it requires Apple's Swift tools, but no Apple Developer membership. Headroom has recovery safeguards, but this beta does not promise identical behavior on every display or immunity from every OS failure.
+## Install the app
+
+1. Download **Headroom-0.4.0-community-beta-arm64.zip** from the assets below and unzip it.
+2. Drag **Headroom.app** into **Applications** and open it.
+3. If macOS says the developer cannot be verified or Apple could not check the app, dismiss the message and open **System Settings → Privacy & Security**.
+4. Under **Security**, click **Open Anyway** for Headroom, authenticate if asked, and confirm **Open**.
+5. Click the black sun in the menu bar to turn on brightness boost.
+
+If **Open Anyway** is missing, try opening Headroom from Applications again, then return to Privacy & Security. macOS remembers the exception for later launches. See [Apple's instructions](https://support.apple.com/102445).
+
+The beta is ad-hoc signed, not Developer ID signed or notarized. No compiling or Apple Developer membership is needed to use the packaged app. Source code and checksums are also included. Headroom has recovery safeguards, but this beta does not promise identical behavior on every display or immunity from every OS failure.

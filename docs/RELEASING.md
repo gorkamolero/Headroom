@@ -11,7 +11,7 @@ swift test
 ./scripts/package-release.sh --beta dist
 ```
 
-The output is `Headroom-0.4.0-community-beta-arm64.zip` with a matching `.zip.sha256` checksum. The ZIP contains `Headroom.app` and `READ-ME.txt`. An ad-hoc signature checks bundle integrity locally; it does not establish a Developer ID identity or provide notarization. macOS may block a downloaded beta from opening. Building from source is the recommended route for this release.
+The output is `Headroom-0.4.0-community-beta-arm64.zip` with a matching `.zip.sha256` checksum. The ZIP contains `Headroom.app` and `READ-ME.txt`. An ad-hoc signature checks bundle integrity locally; it does not establish a Developer ID identity or provide notarization. Recipients can install the app directly using the [installation steps](../README.md#install), including macOS's **Open Anyway** action when required. Building from source is optional.
 
 The accompanying `Headroom-0.4.0-source.zip` contains the committed source, icon assets, tests and documentation, with no build cache, raw display journals or signing credentials. Create it from a clean, committed checkout:
 

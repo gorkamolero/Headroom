@@ -8,12 +8,25 @@ A small macOS menu bar app for brighter everyday desktop content on compatible X
 
 Headroom uses the extra brightness range that macOS makes available for HDR content. It stays in your menu bar, with an on/off switch and brightness slider for each display. There is no main window, account, screen recording, or continuous video playback.
 
+## Install
+
+1. Open [Releases](https://github.com/gorkamolero/Headroom/releases) and download **Headroom-0.4.0-community-beta-arm64.zip**.
+2. Double-click the ZIP to extract it, then drag **Headroom.app** into **Applications**.
+3. Open **Headroom** from Applications.
+
+If macOS says the developer cannot be verified or Apple could not check the app:
+
+1. Dismiss the message, then open **System Settings → Privacy & Security**.
+2. Scroll to **Security** and click **Open Anyway** next to the message about Headroom.
+3. Authenticate if asked, then click **Open** in the confirmation dialog.
+
+That saves an exception for Headroom, so subsequent launches work normally. If **Open Anyway** is missing, try opening Headroom from Applications once more, then return to Privacy & Security. This is [Apple's per-app opening procedure](https://support.apple.com/102445). The beta is ad-hoc signed, not Developer ID signed or notarized. **You do not need to build from source to use the downloaded app.**
+
 ## Using Headroom
 
-1. Move `Headroom.app` into Applications and open it.
-2. Click the black sun in the menu bar. Headroom starts **off**.
-3. Enable a supported display and adjust its slider.
-4. Switch it off to restore that display, or choose **Quit Headroom** to restore all active displays and exit.
+1. Click the black sun in the menu bar. Headroom starts **off**.
+2. Enable a supported display and adjust its slider.
+3. Switch it off to restore that display, or choose **Quit Headroom** to restore all active displays and exit.
 
 Headroom saves the slider setting for each display. After sleep, wake, locking, or a display configuration change, enable boost again when you want it. If extra brightness is unavailable, the menu says so.
 
@@ -49,7 +62,7 @@ swift test
 open "$PWD/dist/Headroom.app"
 ```
 
-This release is available as source and an ad-hoc signed community beta. It is **not Developer ID signed or notarized**; macOS may block a downloaded copy from opening. Building from the supplied source is the recommended installation route for this release. No Apple Developer membership is required to build it locally. [Release packaging](docs/RELEASING.md) documents the beta workflow and an optional future notarized workflow.
+Building from source is optional and requires no Apple Developer membership. To use the packaged app, follow [Install](#install) above. [Release packaging](docs/RELEASING.md) documents the beta build and optional future notarization.
 
 The source also includes `HeadroomLab`, the earlier bounded Metal experiment, for development. It is not part of the normal menu-bar experience.
 
