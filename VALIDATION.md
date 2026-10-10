@@ -42,6 +42,12 @@ No brightness in nits, contrast ratio, color error, battery-life change, or sust
 
 The installed 0.4.0 app started off, rejected a duplicate launch cleanly, and then sustained the saved boost through a 35.02-second observation with the same session surviving renewal. With the menu closed, the app averaged approximately **0.200% of one CPU core** and used **59.4 MiB** resident memory; its helper averaged **0.086%** and used **12.4 MiB**. These are short process samples from CPU-time counters, excluding WindowServer, total GPU work and display power. They are not a battery-life or sustained-load benchmark.
 
+## Packaging and remote build status
+
+The 0.4.0 beta archive was extracted and its app signature verified again. Both executables contain only system-library dependencies, target arm64/macOS 13, and contain no developer home-directory paths. The installed app uses the verified final icon assets. The uploaded archive's SHA-256 matches the local package: `02cbc51debf0aa4ec02490421770bcd5fc2a04d1d74cbb9325e90f27403b8482`.
+
+Local tests and packaging passed. The GitHub Actions workflow passed actionlint 1.7.12, but [the remote run](https://github.com/gorkamolero/Headroom/actions/runs/38074730282) returned `startup_failure` before creating any jobs. GitHub supplied no detailed reason or runner logs, so remote CI is not verified. This is not recorded as a passing build. The beta remains ad-hoc signed; Developer ID signing and notarization have not occurred.
+
 ## Remaining compatibility work
 
 | Area | Status |
