@@ -284,7 +284,26 @@ if CommandLine.arguments.contains("--diagnose-brightness-keys") {
         ["name": screen.localizedName, "builtIn": CGDisplayIsBuiltin(screenID(screen)) != 0,
          "normalBrightness": reader.brightness(displayID:screenID(screen)).map { $0 as Any } ?? NSNull()]
     }
-    let report: [String:Any] = ["accessibility": AXIsProcessTrusted(), "displays": displays]
+    var tapCount: UInt32 = 0
+    var activeTap = false
+    let runningPIDs = Set(NSRunningApplication.runningApplications(withBundleIdentifier:"local.gorka.Headroom").map(\.processIdentifier))
+    if CGGetEventTapList(0,nil,&tapCount) == .success, tapCount > 0 {
+        let taps = UnsafeMutablePointer<CGEventTapInformation>.allocate(capacity:Int(tapCount))
+        defer { taps.deallocate() }
+        var returned: UInt32 = 0
+        if CGGetEventTapList(tapCount,taps,&returned) == .success {
+            for index in 0..<Int(min(returned,tapCount)) {
+                let tap = taps[index]
+                if runningPIDs.contains(tap.tappingProcess), tap.enabled,
+                   tap.options == .defaultTap, tap.eventsOfInterest == (1 << 14) { activeTap = true }
+            }
+        }
+    }
+    // A CLI invocation can be attributed to its terminal/agent by TCC. The
+    // GUI's enabled event tap is stronger evidence than this process's AX bit.
+    let report: [String:Any] = ["diagnosticProcessAccessibility": AXIsProcessTrusted(),
+        "runningAppBrightnessTapEnabled": activeTap,
+        "nativeBrightnessIndicatorAvailable": NativeBrightnessOSD.isAvailable, "displays": displays]
     if let data = try? JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]) {
         print(String(decoding:data,as:UTF8.self))
     }

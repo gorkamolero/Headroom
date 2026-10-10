@@ -2,11 +2,13 @@
 
 - Optional **Use Brightness Keys** control. macOS keeps the normal brightness range; a fresh Up press at maximum starts Headroom boost.
 - Down reduces boost and restores the normal range. Hold Option–Shift for fine adjustments.
-- A small, temporary boost indicator; responsive, coalesced adjustments.
+- macOS's own brightness indicator, with its bar showing the extra boost range; responsive, coalesced adjustments. No custom overlay fallback.
 - Accessibility is requested only for key control. Keys target the built-in display, or the primary display on a desktop Mac, and pause while Lunar is running.
-- The compatibility layer only reads normal brightness. It does not change automatic brightness or use private brightness setters.
+- Two isolated private adapters read normal brightness and request the system indicator. They do not change automatic brightness or use private brightness setters.
 
-58 local tests and the signed beta build passed. Live keyboard verification is pending Accessibility approval. This candidate has not replaced the public 0.4.0 download.
+58 local tests and the native-indicator build's ad-hoc signature verification passed. The system indicator's runtime interface resolved and accepted requests without error. Accessibility approval and an enabled brightness-only event tap are verified for the installed build 6 GUI; a full physical-key and visual validation remains pending. This candidate has not replaced the public 0.4.0 download.
+
+Updating an ad-hoc signed beta may require enabling Headroom in Accessibility again because the build's identity changes. Headroom preserves macOS's normal permission checks.
 
 # Headroom 0.4.0 — community beta
 

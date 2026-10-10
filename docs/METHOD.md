@@ -6,7 +6,7 @@ Headroom combines an HDR activation surface with a display transfer-table adjust
 
 The app reads each `NSScreen`'s potential and current EDR headroom. It requires a connected, non-mirrored display with potential headroom greater than 1.01. Current headroom is checked again after activation and while running. If the system provides no extra range, the session stops and the menu reports unavailability.
 
-Physical display identity, display mode, and color-profile configuration are recorded. The boost and recovery implementation uses public AppKit, Core Graphics, AVFoundation, and QuartzCore APIs. The separate development lab also uses Metal. The next beta adds one private, read-only function for optional keyboard control, isolated as described below.
+Physical display identity, display mode, and color-profile configuration are recorded. The boost and recovery implementation uses public AppKit, Core Graphics, AVFoundation, and QuartzCore APIs. The separate development lab also uses Metal. The local 0.5.0 candidate adds two private integrations for optional keyboard control: a normal-brightness getter and macOS's own on-screen indicator, isolated as described below.
 
 ## 2. Make an HDR surface available
 
@@ -48,9 +48,11 @@ Below normal maximum, brightness keys pass through to macOS. At maximum, a fresh
 
 Media-key events contain no physical display UUID. Headroom targets the connected built-in display, or the primary display when no built-in display is connected. Independent menu controls remain available for every supported display. Keyboard handling pauses while Lunar runs, without quitting or changing Lunar. This feature does not add external-monitor DDC, below-normal software dimming, or automatic brightness control.
 
-A small AppKit overlay shows the requested table multiplier and hides automatically. It neither becomes the active window nor claims to measure luminance. A displayed `1.25×` is a boost input setting, not evidence of 25% more physical brightness.
+macOS renders its own brightness indicator through the `NativeBrightnessOSD` compatibility adapter. While the boost factor is above 1, the bar shows `(factor - 1) / (maximumFactor - 1)`, the position within the extra range. Returning to a factor of 1 shows the normal maximum bar before macOS resumes ordinary brightness keys. This is a control position, not measured luminance or a claim of twice the brightness. Status and errors stay in Headroom's menu. If the native indicator is unavailable, no custom panel is substituted.
 
-The compatibility layer dynamically loads `DisplayServicesGetBrightness` to read native brightness. This private API is used only to decide when normal brightness is at maximum; no native brightness setter, display-preset change, or automatic-brightness override is used. Missing or unsuccessful reads leave normal keys with macOS. The code and overlay are independently implemented; no Lunar code or assets are included. See [Apple sources](../APPLE-SOURCES.md#brightness-keys--next-beta). Live keyboard interception remains a validation step after Accessibility permission is granted.
+`NormalBrightnessReader` dynamically loads `DisplayServicesGetBrightness` to read native brightness. This private API determines the normal-maximum boundary and detects system brightness changes during a keyboard-controlled session. It does not set brightness. Missing or unsuccessful readings prevent automatic entry into boost. `NativeBrightnessOSD` separately loads the private OSD framework, checks the `OSDManager` method signatures, and asks macOS to draw its indicator. Neither adapter changes the display preset or automatic brightness. No Lunar code or assets are included. See [Apple sources](../APPLE-SOURCES.md#brightness-keys--next-beta).
+
+The running GUI's Accessibility grant and enabled, brightness-only event tap have been verified. Physical media-key repetition, restoration handoff and the native indicator remain separate live checks. Updated ad-hoc builds may need Accessibility approval again because their code identity changes; Headroom keeps the normal macOS permission and signature checks.
 
 ## Scope of the safeguards
 

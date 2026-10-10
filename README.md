@@ -34,13 +34,15 @@ The app currently targets **Apple Silicon and macOS 13 or later**. Live testing 
 
 ### Next beta: brightness keys
 
-The development version adds **Use Brightness Keys** to the menu. This is not included in the 0.4.0 download. Enable it and allow Headroom in **System Settings → Privacy & Security → Accessibility** to control boost with the keyboard:
+The local 0.5.0 candidate adds **Use Brightness Keys** to the menu. This is not included in the public 0.4.0 download. Enable it and allow Headroom in **System Settings → Privacy & Security → Accessibility** to control boost with the keyboard:
 
 - **Brighter:** normal brightness works as usual. At maximum, release the key and press Up again to enter boost. Holding Up from below maximum does not accidentally cross into boost.
 - **Dimmer:** Down reduces boost, restores normal display settings at the boundary, then continues through macOS's normal brightness range.
 - **Smaller steps:** hold **Option + Shift** while pressing a brightness key.
 
-The small on-screen indicator shows the boost setting, not measured brightness or nits. Keys target the built-in display when connected, otherwise the primary display; the per-display menu switches and sliders remain available. Keyboard control pauses while Lunar is running; Headroom never quits it for you. Live keyboard interception still needs validation after Accessibility permission is granted.
+The candidate uses **macOS's own brightness indicator**. In boost, its bar represents the position within Headroom's extra range; returning to normal shows the normal maximum before macOS resumes ordinary key handling. The bar does not measure brightness or nits. There is no custom overlay fallback if the native indicator is unavailable.
+
+Keys target the built-in display when connected, otherwise the primary display; the per-display menu switches and sliders remain available. Keyboard control pauses while Lunar is running; Headroom never quits it for you. Accessibility approval and installation of the brightness-only event tap have been verified on the test Mac. Physical-key repetition, the boundary handoff and the native indicator still need end-to-end validation.
 
 ## Designed to restore your display
 
@@ -61,6 +63,8 @@ The slider controls a table multiplier up to 2.0, further limited by available h
 Headroom runs locally. It has no telemetry, account system, network client, or automatic updater. It does not request Screen Recording, camera, microphone, or Full Disk Access permissions. It installs no login item or permanent background service.
 
 The 0.4.0 release needs no Accessibility permission. In the development version, optional brightness-key control requires Accessibility; the menu controls work without it. Only brightness-key events are handled, and keystrokes are not recorded.
+
+An update to an ad-hoc signed beta may require enabling Headroom in Accessibility again. These builds do not have a stable signing identity across versions; this is part of [macOS's app identity checks](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
 
 The app stores per-display slider preferences and local recovery data. Recovery records contain display identifiers and the original color tables; they are retained when recovery needs another attempt. See [local data and removal](docs/RECOVERY.md#local-data-and-removal).
 
