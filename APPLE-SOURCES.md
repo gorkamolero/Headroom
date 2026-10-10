@@ -1,6 +1,6 @@
 # Apple sources
 
-Reviewed on 10 October 2026. Headroom is independently implemented with public Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no third-party implementation or media is included in this repository. There are no private macOS API calls.
+Reviewed on 10 October 2026. Headroom is independently implemented with Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no Lunar code or assets are included. Release 0.4.0 uses no private macOS APIs. The next beta's optional brightness-key feature isolates a read-only private API behind a compatibility layer, described below.
 
 ## Display behavior
 
@@ -13,6 +13,13 @@ Reviewed on 10 October 2026. Headroom is independently implemented with public A
 - [CGDisplayRestoreColorSyncSettings](https://developer.apple.com/documentation/coregraphics/cgdisplayrestorecolorsyncsettings()): restores ColorSync defaults for all displays. Headroom's normal recovery instead restores the captured tables for the affected display.
 
 Apple DTS [reproduced successful transfer-table writes and matching readback without a visible change](https://developer.apple.com/forums/thread/819331) on an M5 Max running macOS 26.3.1, including built-in and external displays. The latest Apple response visible at review still described the reported bugs as open and under investigation. This establishes why readback alone is insufficient; it does not prove that every later OS release or every Mac has the same behavior. Other participants' reports about automatic brightness and HDR interactions are compatibility test leads, not verified Headroom results.
+
+## Brightness keys — next beta
+
+- [CGEvent.tapCreate](https://developer.apple.com/documentation/coregraphics/cgevent/tapcreate(tap:place:options:eventsofinterest:callback:userinfo:)): installs the event tap used to handle brightness media keys. Other events pass through.
+- [AXIsProcessTrustedWithOptions](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions) and [Apple's Accessibility permission instructions](https://support.apple.com/guide/mac-help/allow-accessibility-apps-to-access-your-mac-mh43185/mac): the user grants permission before keyboard interception can operate. This does not require Screen Recording.
+
+The compatibility layer dynamically resolves `DisplayServicesGetBrightness` to read normal display brightness and decide whether an extra Up press can start boost. This function is private and has no public Apple API contract. Failure leaves normal keys with macOS. Headroom does not call a native brightness setter or override automatic brightness. The existing transfer-table and recovery path supplies the boost. Live event-tap behavior requires separate validation after permission is granted.
 
 ## Lifecycle and distribution
 

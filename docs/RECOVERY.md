@@ -20,9 +20,19 @@ A changed profile or a different active transform can prevent Headroom from prov
 
 There is no universal “reset everything” action in normal recovery. Resetting all displays to ColorSync defaults is different from restoring the exact original tables captured for one display.
 
+## Brightness keys — next beta
+
+Keyboard control is a development feature, not part of the 0.4.0 download. Turn on **Use Brightness Keys** and allow Headroom under **System Settings → Privacy & Security → Accessibility**. The menu switches and sliders remain usable without this permission; Screen Recording is not needed.
+
+Below maximum, macOS handles normal brightness. Release Up at maximum and press it again to enter boost. Down reduces boost and restores the original tables before normal dimming resumes. Holding Option + Shift gives smaller steps. The on-screen multiplier is a setting, not a measurement of screen brightness.
+
+Keys target the built-in display, otherwise the primary display. Use the per-display menu for another screen. If Lunar is running, Headroom pauses keyboard control to avoid both apps handling the same key. Quit Lunar yourself if you want Headroom to handle the keys; Headroom does not close it automatically.
+
+If keys do not enter boost, check Accessibility permission and the menu's availability message. An unavailable native-brightness read also leaves keys with macOS. Turning **Use Brightness Keys** off returns keyboard handling to macOS; use the display switch to turn off any active boost. Sleep and quit discard pending key actions, and existing display restoration safeguards still apply. Actual key interception needs validation with permission enabled.
+
 ## Local data and removal
 
-Headroom saves slider preferences in macOS user preferences. Its local support data is:
+Headroom saves slider preferences in macOS user preferences; the development version also saves whether brightness-key control is enabled. Its local support data is:
 
 | Location | Purpose |
 | --- | --- |

@@ -32,6 +32,16 @@ Headroom saves the slider setting for each display. After sleep, wake, locking, 
 
 The app currently targets **Apple Silicon and macOS 13 or later**. Live testing has covered an M5 Pro MacBook Pro's built-in Liquid Retina XDR display on macOS 27.0.1. Other Mac, display, and OS combinations need confirmation. A display advertising EDR support may still have no extra brightness available under its current settings.
 
+### Next beta: brightness keys
+
+The development version adds **Use Brightness Keys** to the menu. This is not included in the 0.4.0 download. Enable it and allow Headroom in **System Settings → Privacy & Security → Accessibility** to control boost with the keyboard:
+
+- **Brighter:** normal brightness works as usual. At maximum, release the key and press Up again to enter boost. Holding Up from below maximum does not accidentally cross into boost.
+- **Dimmer:** Down reduces boost, restores normal display settings at the boundary, then continues through macOS's normal brightness range.
+- **Smaller steps:** hold **Option + Shift** while pressing a brightness key.
+
+The small on-screen indicator shows the boost setting, not measured brightness or nits. Keys target the built-in display when connected, otherwise the primary display; the per-display menu switches and sliders remain available. Keyboard control pauses while Lunar is running; Headroom never quits it for you. Live keyboard interception still needs validation after Accessibility permission is granted.
+
 ## Designed to restore your display
 
 Headroom saves the original red, green, and blue display tables before changing them. Every slider adjustment starts from those originals, so adjustments cannot accumulate. A separate recovery helper watches the app, and a saved recovery record supports restoration after an interrupted session.
@@ -48,7 +58,9 @@ The slider controls a table multiplier up to 2.0, further limited by available h
 
 ## Privacy and permissions
 
-Headroom runs locally. It has no telemetry, account system, network client, or automatic updater. It does not request Screen Recording, Accessibility, camera, microphone, or Full Disk Access permissions. It installs no login item or permanent background service.
+Headroom runs locally. It has no telemetry, account system, network client, or automatic updater. It does not request Screen Recording, camera, microphone, or Full Disk Access permissions. It installs no login item or permanent background service.
+
+The 0.4.0 release needs no Accessibility permission. In the development version, optional brightness-key control requires Accessibility; the menu controls work without it. Only brightness-key events are handled, and keystrokes are not recorded.
 
 The app stores per-display slider preferences and local recovery data. Recovery records contain display identifiers and the original color tables; they are retained when recovery needs another attempt. See [local data and removal](docs/RECOVERY.md#local-data-and-removal).
 

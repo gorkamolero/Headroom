@@ -1,3 +1,13 @@
+# Headroom 0.5.0 — local candidate
+
+- Optional **Use Brightness Keys** control. macOS keeps the normal brightness range; a fresh Up press at maximum starts Headroom boost.
+- Down reduces boost and restores the normal range. Hold Option–Shift for fine adjustments.
+- A small, temporary boost indicator; responsive, coalesced adjustments.
+- Accessibility is requested only for key control. Keys target the built-in display, or the primary display on a desktop Mac, and pause while Lunar is running.
+- The compatibility layer only reads normal brightness. It does not change automatic brightness or use private brightness setters.
+
+58 local tests and the signed beta build passed. Live keyboard verification is pending Accessibility approval. This candidate has not replaced the public 0.4.0 download.
+
 # Headroom 0.4.0 — community beta
 
 Headroom adds a small black-sun menu to macOS with independent brightness controls for compatible XDR displays. It uses the display's available EDR headroom for brighter ordinary desktop content, with a saved slider setting for each display.

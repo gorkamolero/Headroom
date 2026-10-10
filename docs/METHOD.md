@@ -6,7 +6,7 @@ Headroom combines an HDR activation surface with a display transfer-table adjust
 
 The app reads each `NSScreen`'s potential and current EDR headroom. It requires a connected, non-mirrored display with potential headroom greater than 1.01. Current headroom is checked again after activation and while running. If the system provides no extra range, the session stops and the menu reports unavailability.
 
-Physical display identity, display mode, and color-profile configuration are recorded. The implementation uses public AppKit, Core Graphics, AVFoundation, and QuartzCore APIs. The separate development lab also uses Metal.
+Physical display identity, display mode, and color-profile configuration are recorded. The boost and recovery implementation uses public AppKit, Core Graphics, AVFoundation, and QuartzCore APIs. The separate development lab also uses Metal. The next beta adds one private, read-only function for optional keyboard control, isolated as described below.
 
 ## 2. Make an HDR surface available
 
@@ -39,6 +39,18 @@ Normal disable and quit restore the original tables and read them back before re
 Recovery checks the physical display and its configuration. If the display is disconnected, its profile has changed, or another transform is active, Headroom retains its record and blocks a new session rather than blindly overwriting the current display state. Reopening the app retries pending recovery for connected displays.
 
 Sleep, display sleep, lock, wake, and relevant display changes end or pause sessions. A new boost requires explicit enable. No privileged helper, login item, firmware change, or permanent background daemon is installed.
+
+## Brightness keys — next beta
+
+This feature is in development and is not included in the 0.4.0 release. **Use Brightness Keys** is opt-in and requires Accessibility permission. A Core Graphics event tap handles brightness media keys; other input passes through and is not recorded. Screen Recording is not required.
+
+Below normal maximum, brightness keys pass through to macOS. At maximum, a fresh Up press starts the existing boost session; a held key does not cross that boundary. Down reduces boost, restores the original tables when leaving boost, and then returns control to macOS. Option + Shift selects smaller increments. Pending key actions are discarded on sleep or quit. The helper, saved baseline, lease, and restoration checks remain the same.
+
+Media-key events contain no physical display UUID. Headroom targets the connected built-in display, or the primary display when no built-in display is connected. Independent menu controls remain available for every supported display. Keyboard handling pauses while Lunar runs, without quitting or changing Lunar. This feature does not add external-monitor DDC, below-normal software dimming, or automatic brightness control.
+
+A small AppKit overlay shows the requested table multiplier and hides automatically. It neither becomes the active window nor claims to measure luminance. A displayed `1.25×` is a boost input setting, not evidence of 25% more physical brightness.
+
+The compatibility layer dynamically loads `DisplayServicesGetBrightness` to read native brightness. This private API is used only to decide when normal brightness is at maximum; no native brightness setter, display-preset change, or automatic-brightness override is used. Missing or unsuccessful reads leave normal keys with macOS. The code and overlay are independently implemented; no Lunar code or assets are included. See [Apple sources](../APPLE-SOURCES.md#brightness-keys--next-beta). Live keyboard interception remains a validation step after Accessibility permission is granted.
 
 ## Scope of the safeguards
 

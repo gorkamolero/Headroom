@@ -17,6 +17,14 @@ The deployment target is macOS 13. That is a build target, not evidence that eve
 
 ## Completed checks
 
+### 0.5.0 brightness-key candidate
+
+The local 0.5.0 candidate passed **58 automated tests**: the existing 34 recovery/core tests and 24 new media-key parser, policy, and gesture-sequence tests. The new cases cover a deliberate extra Up press at normal maximum, normal-range passthrough, held-key behavior, fine increments, key-up ownership, restoration before handing held Down back to macOS, unsupported modifiers, and invalid readings.
+
+The release build and deep/strict ad-hoc signature verification passed. The isolated, read-only normal-brightness getter returned `1.0` successfully on the built-in display. Review also found and corrected stale-threshold activation and the held-Down handoff. These checks do **not** establish that global interception, native repeat handoff, or the visible indicator works end to end: live verification requires Accessibility permission. The public 0.4.0 release remains unchanged while that check is pending.
+
+### Existing 0.4.0 evidence
+
 | Check | Result and scope |
 | --- | --- |
 | Core automated tests | 34 tests passed for 0.4.0. Covers table validation/scaling, recovery ownership, identity/configuration checks, locks, durable records, leases, and configuration changes during recovery. |

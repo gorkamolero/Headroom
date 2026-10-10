@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import DisplayCore
 import Darwin
 
@@ -90,6 +91,9 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
     var connectedUUIDs = Set<String>()
     let recoveryRoot = FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Headroom/Recovery",isDirectory:true)
     let recoveryNotice = NSTextField(wrappingLabelWithString:"")
+    lazy var brightnessKeys = BrightnessKeyController { [weak self] in Array(self?.sessions.values ?? [:].values) }
+    var keysItem: NSMenuItem?
+    var keysStatusItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification:Notification){
         if let identifier = Bundle.main.bundleIdentifier,
@@ -109,14 +113,16 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         status.menu = menu
         recoverDisconnectedJournals()
         rebuild()
+        brightnessKeys.changed = { [weak self] in self?.updateKeyMenu() }
+        brightnessKeys.startMonitoring()
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName:NSApplication.didChangeScreenParametersNotification,object:nil,queue:.main){[weak self] _ in self?.reconcile()})
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification,NSWorkspace.screensDidSleepNotification,NSWorkspace.sessionDidResignActiveNotification] {
-            observers.append(workspace.addObserver(forName:name,object:nil,queue:.main){[weak self] _ in self?.stopAll("Paused after sleep or lock")})
+            observers.append(workspace.addObserver(forName:name,object:nil,queue:.main){[weak self] _ in self?.brightnessKeys.suspend();self?.stopAll("Paused after sleep or lock")})
         }
         for name in [NSWorkspace.didWakeNotification,NSWorkspace.screensDidWakeNotification,NSWorkspace.sessionDidBecomeActiveNotification] {
-            observers.append(workspace.addObserver(forName:name,object:nil,queue:.main){[weak self] _ in self?.stopAll("Paused after wake — turn on to resume");self?.reconcile()})
+            observers.append(workspace.addObserver(forName:name,object:nil,queue:.main){[weak self] _ in self?.stopAll("Paused after wake — turn on to resume");self?.reconcile();self?.brightnessKeys.resume()})
         }
         let t = Timer(timeInterval:1,repeats:true){[weak self] _ in
             guard let self else{return}
@@ -136,6 +142,9 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         if let option = CommandLine.arguments.firstIndex(of:"--resume-display"), CommandLine.arguments.indices.contains(option+1),
            let session = sessions[CommandLine.arguments[option+1]] {session.start()}
         if CommandLine.arguments.contains("--show") {RunLoop.main.perform(inModes:[.default]) {self.show()}}
+        if CommandLine.arguments.contains("--enable-brightness-keys") {
+            RunLoop.main.perform(inModes:[.default]) {self.brightnessKeys.setEnabled(true)}
+        }
     }
     func applicationShouldHandleReopen(_ sender:NSApplication, hasVisibleWindows flag:Bool)->Bool {
         RunLoop.main.perform(inModes:[.default]) {self.show()}
@@ -153,6 +162,7 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         recoveryNotice.stringValue = pending>0 ? "An earlier display session needs recovery. Reconnect its display and reopen Headroom." : ""
     }
     func reconcile(){
+        brightnessKeys.cancelPending()
         let connected = Set(NSScreen.screens.compactMap{try? DisplayIdentity.capture(display:screenID($0)).uuid})
         for (uuid,session) in sessions where !connected.contains(uuid) {
             if session.busy {session.stop(reason:"Display disconnected")}
@@ -201,6 +211,11 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
             let off = NSMenuItem(title:"Turn All Off",action:#selector(turnAllOff),keyEquivalent:"")
             off.target = self;menu.addItem(off)
         }
+        let keys = NSMenuItem(title:"Use Brightness Keys",action:#selector(toggleBrightnessKeys),keyEquivalent:"")
+        keys.target = self;menu.addItem(keys);keysItem = keys
+        let keyStatus = NSMenuItem(title:"",action:#selector(openKeyPermissions),keyEquivalent:"")
+        keyStatus.target = self;menu.addItem(keyStatus);keysStatusItem = keyStatus
+        updateKeyMenu()
         let more = NSMenuItem(title:"More",action:nil,keyEquivalent:"")
         let details = NSMenu();details.autoenablesItems = false
         let about = NSMenuItem(title:"About Headroom…",action:#selector(showInfo),keyEquivalent:"")
@@ -220,6 +235,20 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         status?.button?.toolTip = on>0 ? "Headroom · \(on) display\(on == 1 ? "":"s") on" : "Headroom · off"
         status?.button?.setAccessibilityValue(on>0 ? "Brightness boost on" : "Brightness boost off")
     }
+    func updateKeyMenu() {
+        keysItem?.state = brightnessKeys.isEnabled ? .on : .off
+        keysStatusItem?.title = brightnessKeys.message
+        keysStatusItem?.isHidden = brightnessKeys.message.isEmpty || !brightnessKeys.isEnabled
+        keysStatusItem?.isEnabled = brightnessKeys.permissionRequired
+    }
+    @objc func toggleBrightnessKeys() {
+        // Permission UI is opened after menu tracking finishes.
+        let enabled = !brightnessKeys.isEnabled
+        RunLoop.main.perform(inModes:[.default]) {self.brightnessKeys.setEnabled(enabled)}
+    }
+    @objc func openKeyPermissions() {
+        RunLoop.main.perform(inModes:[.default]) {self.brightnessKeys.openAccessibilitySettings()}
+    }
     @objc func show(){
         reconcile()
         NSApp.activate(ignoringOtherApps:true)
@@ -237,10 +266,11 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         if alert.runModal() == .alertSecondButtonReturn, let url = URL(string:"https://github.com/gorkamolero/Headroom") {NSWorkspace.shared.open(url)}
     }
     @objc func retryRecovery(){recoveryRequested = true;stopAll("Restoring display settings…")}
-    func stopAll(_ reason:String){for session in sessions.values where session.busy {session.stop(reason:reason)};updateState()}
+    func stopAll(_ reason:String){brightnessKeys.cancelPending();for session in sessions.values where session.busy {session.stop(reason:reason)};updateState()}
     @objc func turnAllOff(){stopAll("Off")}
     @objc func quitApp(){NSApp.terminate(nil)}
     func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
+        brightnessKeys.shutdown()
         if sessions.values.contains(where:{$0.busy}) {terminating = true;stopAll("Off");return .terminateLater}
         return .terminateNow
     }
@@ -248,6 +278,18 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
 
 signal(SIGPIPE,SIG_IGN)
 let application = NSApplication.shared
+if CommandLine.arguments.contains("--diagnose-brightness-keys") {
+    let reader = NormalBrightnessReader()
+    let displays: [[String:Any]] = NSScreen.screens.map { screen in
+        ["name": screen.localizedName, "builtIn": CGDisplayIsBuiltin(screenID(screen)) != 0,
+         "normalBrightness": reader.brightness(displayID:screenID(screen)).map { $0 as Any } ?? NSNull()]
+    }
+    let report: [String:Any] = ["accessibility": AXIsProcessTrusted(), "displays": displays]
+    if let data = try? JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]) {
+        print(String(decoding:data,as:UTF8.self))
+    }
+    exit(0)
+}
 let delegate = HeadroomDelegate()
 application.delegate = delegate
 application.run()

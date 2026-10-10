@@ -34,6 +34,7 @@ final class BoostSession {
     private var nextReadback: TimeInterval = 0
     private var appliedFactor = 1.0
     private var pendingSet = false
+    private var levelTimer: Timer?
     private var beginSent = false
     private var errorMessage: String?
     private var stopMessage: String?
@@ -99,10 +100,29 @@ final class BoostSession {
         else if state != .stopping {start()}
     }
     func setLevel(_ value: Double) {
+        guard value.isFinite else { return }
         desiredFactor = min(maximumFactor,max(1,value))
         UserDefaults.standard.set(desiredFactor,forKey:"boost.\(uuid)")
         pendingSet = true
+        scheduleLevelUpdate()
         update()
+    }
+    private func scheduleLevelUpdate() {
+        guard state == .on, levelTimer == nil else { return }
+        let timer = Timer(timeInterval:0.04,repeats:false) { [weak self] _ in
+            guard let self else { return }
+            self.levelTimer = nil
+            guard self.state == .on, self.pendingSet else { return }
+            self.applyPendingLevel()
+        }
+        levelTimer = timer
+        RunLoop.main.add(timer,forMode:.common)
+    }
+    private func applyPendingLevel() {
+        guard state == .on else { return }
+        let factor = allowedFactor()
+        pendingSet = false;lastRequestedFactor = factor;appliedFactor = factor
+        send(["command":"set","factor":factor])
     }
     func start() {
         guard !busy else {return}
@@ -206,6 +226,7 @@ final class BoostSession {
                 send(["command":"begin","displayID":screenID(screen),"displayUUID":uuid,"factor":appliedFactor,"duration":30,"renewable":true])
             } else if event == "began" && ok && state == .preparing {
                 state = .on;message = "On";nextRenew = ProcessInfo.processInfo.systemUptime + 10;nextReadback = 0;update()
+                if pendingSet { scheduleLevelUpdate() }
             } else if event == "set" && ok {
                 appliedFactor = (record["factor"] as? NSNumber)?.doubleValue ?? lastRequestedFactor
             } else if event == "ended" {
@@ -239,12 +260,12 @@ final class BoostSession {
         guard headroom > 1.01 else {stop(reason:"Extra brightness unavailable");return}
         let factor = allowedFactor()
         if pendingSet || abs(factor-appliedFactor)>0.02 {
-            pendingSet = false;lastRequestedFactor = factor;appliedFactor = factor
-            send(["command":"set","factor":factor])
+            applyPendingLevel()
         }
         if now >= nextRenew {nextRenew = now+10;send(["command":"renew"])}
     }
     func stop(reason:String) {
+        levelTimer?.invalidate();levelTimer = nil;pendingSet = false
         carrier?.close();carrier = nil
         if state == .stopping {return}
         stopMessage = reason
