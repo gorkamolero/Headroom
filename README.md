@@ -49,7 +49,7 @@ swift test
 open "$PWD/dist/Headroom.app"
 ```
 
-The beta build uses a local ad-hoc signature. It is **not Developer ID signed or notarized**, and is not a finished Gatekeeper-ready download. A Developer ID certificate and Apple notarization are required before the planned community binary release. Building locally is available now; [release packaging](docs/RELEASING.md) provides both beta and notarized workflows.
+This release is available as source and an ad-hoc signed community beta. It is **not Developer ID signed or notarized**; macOS may block a downloaded copy from opening. Building from the supplied source is the recommended installation route for this release. No Apple Developer membership is required to build it locally. [Release packaging](docs/RELEASING.md) documents the beta workflow and an optional future notarized workflow.
 
 The source also includes `HeadroomLab`, the earlier bounded Metal experiment, for development. It is not part of the normal menu-bar experience.
 

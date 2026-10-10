@@ -14,4 +14,4 @@ The recorded menu scale tests returned every original RGB table sample exactly a
 
 This is an early community beta for Apple Silicon. The build targets macOS 13 or later; live testing has covered an M5 Pro internal XDR display on macOS 27.0.1. Brightness in nits, color accuracy, sustained GPU use, and battery impact have not been measured. The maximum slider setting is a requested table scale, not a measured 2× brightness gain.
 
-The initial local build is ad-hoc signed. Developer ID signing and notarization are still required before the planned downloadable community release. Headroom has recovery safeguards, but this beta does not promise identical behavior on every display or immunity from every OS failure.
+This release includes source code and an ad-hoc signed beta ZIP, with SHA-256 checksums. It is not Developer ID signed or notarized, and macOS may block the downloaded app from opening. Building from source is the recommended route; it requires Apple's Swift tools, but no Apple Developer membership. Headroom has recovery safeguards, but this beta does not promise identical behavior on every display or immunity from every OS failure.

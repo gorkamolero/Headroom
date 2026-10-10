@@ -111,8 +111,9 @@ if [[ "$mode" == --beta ]]; then
 
 SIGNING STATUS
 This community beta has an ad-hoc signature. It is not Developer ID signed or
-notarized by Apple. macOS may prevent a downloaded copy from opening. No system
-security settings need to be disabled; a Developer ID notarized release is pending.
+notarized by Apple. macOS may prevent a downloaded copy from opening. Building
+from the accompanying source is recommended and requires no Apple Developer
+membership. Do not disable system security protections to install this beta.
 BETA
 else
     cat >> "$payload/READ-ME.txt" <<'SIGNED'

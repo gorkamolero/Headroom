@@ -44,7 +44,7 @@ The installed 0.4.0 app started off, rejected a duplicate launch cleanly, and th
 
 ## Packaging and remote build status
 
-The 0.4.0 beta archive was extracted and its app signature verified again. Both executables contain only system-library dependencies, target arm64/macOS 13, and contain no developer home-directory paths. The installed app uses the verified final icon assets. The uploaded archive's SHA-256 matches the local package: `02cbc51debf0aa4ec02490421770bcd5fc2a04d1d74cbb9325e90f27403b8482`.
+The 0.4.0 beta archive was extracted and its app signature verified again. Both executables contain only system-library dependencies, target arm64/macOS 13, and contain no developer home-directory paths. The installed app uses the verified final icon assets. The uploaded archive's SHA-256 matches the local package: `9a698015beff0b6400ad47d1c749a2963b3cb97e67dd8d6e86473b0eb02c1e37`.
 
 Local tests and packaging passed. The GitHub Actions workflow passed actionlint 1.7.12, but [the remote run](https://github.com/gorkamolero/Headroom/actions/runs/38074730282) returned `startup_failure` before creating any jobs. GitHub supplied no detailed reason or runner logs, so remote CI is not verified. This is not recorded as a passing build. The beta remains ad-hoc signed; Developer ID signing and notarization have not occurred.
 
@@ -64,7 +64,7 @@ Local tests and packaging passed. The GitHub Actions workflow passed actionlint 
 | Other color/brightness utilities | Ownership conflicts are detected where readback differs; coexistence matrix pending |
 | Sustained CPU/GPU and battery impact | Pending for the menu release |
 | Instrumented luminance and color clipping | Pending |
-| Developer ID signing, notarization, quarantined-download launch | Pending a configured Apple signing identity and notarization credentials |
+| Developer ID signing, notarization, quarantined-download launch | Not part of 0.4.0: the maintainer selected a beta/source release. Downloaded ad-hoc builds may be blocked by macOS. |
 
 ## Reproducing a useful comparison
 
