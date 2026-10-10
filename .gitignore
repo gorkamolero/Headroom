@@ -1,0 +1,25 @@
+.build/
+.swiftpm/
+.DS_Store
+dist/
+build/
+DerivedData/
+*.app/
+*.dmg
+*.zip
+*.dSYM/
+*.xcuserstate
+xcuserdata/
+
+# Local trials contain device identifiers and original display tables.
+Evidence/
+work/
+*.log
+*-report.json
+
+# Signing credentials and local environment overrides never belong in Git.
+.env
+.env.*
+*.p12
+*.p8
+*.mobileprovision

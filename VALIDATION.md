@@ -1,0 +1,69 @@
+# Validation
+
+Recorded on 10 October 2026. This record separates the current menu app from the earlier Metal lab and separates API results from physical measurements. The repository contains a [sanitized results summary](docs/validation-results.json); raw local logs, device identifiers, and recovery tables are excluded.
+
+## Test environment
+
+| Item | Recorded condition |
+| --- | --- |
+| Mac | Apple Silicon M5 Pro MacBook Pro |
+| Display | Built-in Liquid Retina XDR, 3024 × 1964 |
+| macOS | 27.0.1, build 26A434 |
+| Transfer tables | 1,024 samples per RGB channel |
+| Automatic brightness | Enabled during the menu scale sweep |
+| Luminance/color instrument | None |
+
+The deployment target is macOS 13. That is a build target, not evidence that every supported OS release has been tested. External displays, Intel Macs, and other Apple Silicon models have no recorded live pass.
+
+## Completed checks
+
+| Check | Result and scope |
+| --- | --- |
+| Core automated tests | 34 tests passed for 0.4.0. Covers table validation/scaling, recovery ownership, identity/configuration checks, locks, durable records, leases, and configuration changes during recovery. |
+| Menu activation and renewal | Native menu remained open for 35.22 seconds while the same session survived lease renewal. No recorded error; active factor approximately 1.511. |
+| Menu scale sweep | Requested factors 1.75 and 2.0 were applied and read back. The selected intermediate factor was restored afterward. |
+| Menu disable after scale sweep | All original RGB samples matched saved Float32 baseline exactly: maximum difference 0.0. |
+| 0.4.0 guardian fault scenarios | Stop, closed parent input, lost heartbeat, fixed deadline, SIGTERM, and SIGKILL followed by recovery all finished with exact baseline readback and no remaining journal. Tested with the release helper at factor 1.01. In the SIGKILL case the original tables were already active when recovery ran; no recovery write was needed. |
+| Lab application fault scenarios | Forced termination of the app, forced termination of the helper, and a frozen helper followed by watchdog recovery all finished with exact baseline readback. |
+| Perceived brightness and restoration | In the earlier Metal lab, the observer reported brighter ordinary desktop content and a return after the combined trial. |
+| Near-white steps | The observer distinguished 80%, 90%, and 100% gray patches in the earlier combined lab trial at approximately 1.216. This does not validate color accuracy or the menu app at maximum scale. |
+
+The paused HDR carrier and the lab's single-frame Metal surface are different activation methods. Historical lab results support the recovery design but do not replace live tests of every menu-app condition.
+
+## What the numbers mean
+
+The current EDR value is a rendering allowance reported by macOS. A transfer-table readback reports the API's stored state. Neither proves physical luminance gain. Apple DTS has reproduced successful writes and matching readback with no visible effect on another Mac/OS combination; see [Apple sources](APPLE-SOURCES.md).
+
+During the menu scale sweep, table readback capped values at 1.0. At factor 1.75, 439 of 1,024 samples per channel formed the upper plateau; at factor 2.0, 512 did. This establishes the API's clamping behavior. It does not resolve final compositor highlight clipping or color accuracy. The slider must not be described as “twice as bright.”
+
+No brightness in nits, contrast ratio, color error, battery-life change, or sustained total GPU power has been measured. A ten-second **lab-only** sample used approximately 0.276% of one CPU core for the lab and 0.103% for the helper, with approximately 73.9 MB and 12.7 MB resident memory. It excluded WindowServer and display power and is not a performance claim for the menu release.
+
+## Current menu-app sample
+
+The installed 0.4.0 app started off, rejected a duplicate launch cleanly, and then sustained the saved boost through a 35.02-second observation with the same session surviving renewal. With the menu closed, the app averaged approximately **0.200% of one CPU core** and used **59.4 MiB** resident memory; its helper averaged **0.086%** and used **12.4 MiB**. These are short process samples from CPU-time counters, excluding WindowServer, total GPU work and display power. They are not a battery-life or sustained-load benchmark.
+
+## Remaining compatibility work
+
+| Area | Status |
+| --- | --- |
+| Physical sleep/wake, display sleep, lock/unlock | Handling implemented; complete live lifecycle matrix pending |
+| Disconnection/reconnection and changed display arrangement | Identity/configuration guards implemented; physical multi-display tests pending |
+| Multiple displays and external XDR displays | Independent sessions implemented; live verification pending |
+| Unsupported or mirrored display | Availability guards implemented; live hardware cases pending |
+| HDR video and fullscreen transitions | Pending |
+| Spaces and Stage Manager | Pending |
+| Night Shift and scheduled transitions | Pending |
+| True Tone and ambient changes | Pending |
+| Automatic brightness off/on transitions | Pending; sweep kept it enabled |
+| Other color/brightness utilities | Ownership conflicts are detected where readback differs; coexistence matrix pending |
+| Sustained CPU/GPU and battery impact | Pending for the menu release |
+| Instrumented luminance and color clipping | Pending |
+| Developer ID signing, notarization, quarantined-download launch | Pending a configured Apple signing identity and notarization credentials |
+
+## Reproducing a useful comparison
+
+Keep the room, display preset, system brightness, content, and window sizes fixed. Compare off/on/off using the same ordinary white document, near-white steps, neutral gray ramp, and color patches. Record the requested scale separately from perceived brightness. Verify restored transfer tables after switching off, and record any visible mismatch separately.
+
+For each new hardware/OS combination, verify normal restoration before crash scenarios. Fault-injection tools are development utilities and should be run deliberately, with no other display-adjustment session active. A complete performance test must include compositor work and display power, not only the Headroom process.
+
+Community beta status is appropriate while this matrix remains incomplete. Notarization will establish Apple's distribution checks; it will not certify display compatibility or validate unmeasured brightness claims.

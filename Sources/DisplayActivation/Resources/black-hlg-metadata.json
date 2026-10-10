@@ -1,0 +1,29 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "codec_name": "hevc",
+            "profile": "Main 10",
+            "codec_tag_string": "hvc1",
+            "width": 64,
+            "height": 64,
+            "pix_fmt": "yuv420p10le",
+            "color_range": "tv",
+            "color_space": "bt2020nc",
+            "color_transfer": "arib-std-b67",
+            "color_primaries": "bt2020",
+            "r_frame_rate": "2/1",
+            "avg_frame_rate": "2/1",
+            "nb_frames": "2"
+        }
+    ],
+    "format": {
+        "duration": "1.000000",
+        "size": "5506"
+    }
+}

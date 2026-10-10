@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-10-10",
+  "scope": "Sanitized historical development results; not a complete certification of the 0.4.0 release.",
+  "environment": {
+    "chip": "Apple M5 Pro",
+    "display": "Built-in Liquid Retina XDR",
+    "pixelWidth": 3024,
+    "pixelHeight": 1964,
+    "macOS": "27.0.1",
+    "build": "26A434",
+    "samplesPerChannel": 1024
+  },
+  "baselineUnitTestsPassed": 32,
+  "menu": {
+    "activationMethod": "Paused independently generated black HLG AVPlayerLayer",
+    "nativeMenuSession": {
+      "secondsObserved": 35.224641250038985,
+      "sameJournalSurvivedRenewal": true,
+      "menuOpened": true,
+      "menuClosed": false,
+      "errors": false
+    },
+    "scaleSweep": {
+      "appliedLevels": [
+        1.75,
+        2.0
+      ],
+      "restorationMaximumSampleDifference": 0.0,
+      "readbackClampedToOne": true,
+      "automaticBrightness": "enabled",
+      "physicalLuminanceMultiplier": "not measured"
+    },
+    "readbackPlateaus": [
+      {
+        "factor": 1.75,
+        "channels": {
+          "blue": {
+            "firstUnitPlateauInput": 0.5718475073313783,
+            "unitPlateauSamples": 439,
+            "sameAdjacentSamples": 438
+          },
+          "green": {
+            "firstUnitPlateauInput": 0.5718475073313783,
+            "unitPlateauSamples": 439,
+            "sameAdjacentSamples": 438
+          },
+          "red": {
+            "firstUnitPlateauInput": 0.5718475073313783,
+            "unitPlateauSamples": 439,
+            "sameAdjacentSamples": 438
+          }
+        }
+      },
+      {
+        "factor": 2.0,
+        "channels": {
+          "blue": {
+            "firstUnitPlateauInput": 0.5004887585532747,
+            "unitPlateauSamples": 512,
+            "sameAdjacentSamples": 511
+          },
+          "green": {
+            "firstUnitPlateauInput": 0.5004887585532747,
+            "unitPlateauSamples": 512,
+            "sameAdjacentSamples": 511
+          },
+          "red": {
+            "firstUnitPlateauInput": 0.5004887585532747,
+            "unitPlateauSamples": 512,
+            "sameAdjacentSamples": 511
+          }
+        }
+      }
+    ]
+  },
+  "lab": {
+    "activationMethod": "Single EDR-enabled Metal frame",
+    "guardianFaults": [
+      {
+        "case": "stop",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0
+      },
+      {
+        "case": "parentEOF",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0
+      },
+      {
+        "case": "leaseExpiry",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0
+      },
+      {
+        "case": "deadline",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0
+      },
+      {
+        "case": "SIGTERM",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0
+      },
+      {
+        "case": "SIGKILL_then_recover",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0
+      }
+    ],
+    "applicationFaults": [
+      {
+        "case": "mainSIGKILL",
+        "restoreMaxDifference": 0.0,
+        "helperExited": true
+      },
+      {
+        "case": "helperSIGKILL",
+        "restoreMaxDifference": 0.0,
+        "helperExited": true
+      },
+      {
+        "case": "helperSIGSTOP",
+        "restoreMaxDifference": 0.0,
+        "helperExited": true
+      }
+    ],
+    "userObservation": {
+      "ordinaryDesktopBrighter": true,
+      "appearanceReturnedAfterCombinedTrial": true,
+      "graySteps80_90_100Distinct": true,
+      "combinedTrialApproximateFactor": 1.216,
+      "instrumented": false
+    },
+    "shortPerformanceSample": {
+      "seconds": 10.005141333967913,
+      "applicationPercentOfOneCPUCore": 0.2756570255171218,
+      "helperPercentOfOneCPUCore": 0.10257517934128545,
+      "applicationResidentBytes": 73875456,
+      "helperResidentBytes": 12730368,
+      "includesWindowServer": false,
+      "powerSource": "AC",
+      "appliesToMenuApp": false
+    }
+  },
+  "notMeasured": [
+    "luminance in nits",
+    "color accuracy",
+    "physical highlight clipping at maximum scale",
+    "menu release sustained CPU/GPU usage",
+    "battery impact"
+  ],
+  "privacy": "Device UUIDs, display profiles, recovery tables, local paths, process IDs and raw user replies omitted.",
+  "release040": {
+    "guardianFaults": [
+      {
+        "case": "stop",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0,
+        "recoverySeconds": 0.006676666031125933,
+        "scope": "DisplayGuardian, factor 1.01"
+      },
+      {
+        "case": "parentEOF",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0,
+        "recoverySeconds": 0.006679083046037704,
+        "scope": "DisplayGuardian, factor 1.01"
+      },
+      {
+        "case": "leaseExpiry",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0,
+        "recoverySeconds": 5.059074459015392,
+        "scope": "DisplayGuardian, factor 1.01"
+      },
+      {
+        "case": "deadline",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0,
+        "recoverySeconds": 2.02540941699408,
+        "scope": "DisplayGuardian, factor 1.01"
+      },
+      {
+        "case": "SIGTERM",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0,
+        "recoverySeconds": 0.10761983302654698,
+        "scope": "DisplayGuardian, factor 1.01"
+      },
+      {
+        "case": "SIGKILL_then_recover",
+        "restorationMaxDifference": 0.0,
+        "remainingJournals": 0,
+        "recoverySeconds": 0.03353441599756479,
+        "scope": "DisplayGuardian, factor 1.01"
+      }
+    ],
+    "finalRestorationMaximumSampleDifference": 0.0,
+    "finalRecoveryExit": 0,
+    "forcedTerminationNote": "In SIGKILL_then_recover the original tables were already active at explicit recovery; this demonstrates the final state, not a recovery write.",
+    "unitTestsPassed": 34,
+    "menuAppSmokeTest": {
+      "version": "0.4.0",
+      "secondsObserved": 35.021202875010204,
+      "sameSessionSurvivedRenewal": true,
+      "ordinaryLaunchStayedOff": true,
+      "duplicateLaunchExited": true,
+      "selectedScalingFactor": 1.5106608,
+      "processSamples": {
+        "Headroom": {
+          "meanPercentOfOneCPUCore": 0.19987891406765268,
+          "rssMiB": 59.375
+        },
+        "DisplayGuardian": {
+          "meanPercentOfOneCPUCore": 0.08566239174327979,
+          "rssMiB": 12.421875
+        }
+      },
+      "scope": "35-second active menu-app sample with menu closed; excludes WindowServer and system GPU/power. Not a battery benchmark."
+    }
+  }
+}

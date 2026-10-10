@@ -1,0 +1,33 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests (no display changes)
+        run: swift test
+      - name: Build and verify community beta
+        run: scripts/package-release.sh --beta dist
+      - name: Preserve beta build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Headroom-community-beta-arm64
+          path: |
+            dist/Headroom-*-community-beta-arm64.zip
+            dist/Headroom-*-community-beta-arm64.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
