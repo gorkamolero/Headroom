@@ -15,6 +15,13 @@ public enum DisplayError: Error, LocalizedError {
     }
 }
 
+/// Bounded transfer-table adjustment. A nonzero floor keeps software dimming
+/// recoverable without deliberately blacking out the display.
+public enum DisplayAdjustmentRange {
+    public static let minimumFactor: Double = 0.1
+    public static let maximumFactor: Double = 2
+}
+
 public struct GammaTable: Codable, Equatable {
     public let red: [Float]
     public let green: [Float]
@@ -57,7 +64,9 @@ public struct GammaTable: Codable, Equatable {
     /// Always invoke on the saved original table, never the latest readback.
     /// Values above 1 are an explicitly experimental use of the CoreGraphics API.
     public func scaled(factor: Float) throws -> GammaTable {
-        guard factor.isFinite, factor >= 1, factor <= 2 else { throw DisplayError.invalid("Experimental gain must be between 1 and 2.") }
+        guard factor.isFinite, factor >= Float(DisplayAdjustmentRange.minimumFactor), factor <= Float(DisplayAdjustmentRange.maximumFactor) else {
+            throw DisplayError.invalid("Brightness adjustment must be between 0.1 and 2.")
+        }
         return try GammaTable(red: red.map { $0 * factor }, green: green.map { $0 * factor }, blue: blue.map { $0 * factor })
     }
 

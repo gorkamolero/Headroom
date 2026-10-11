@@ -32,15 +32,19 @@ Headroom saves the slider setting for each display. After sleep, wake, locking, 
 
 The app currently targets **Apple Silicon and macOS 13 or later**. Live testing has covered an M5 Pro MacBook Pro's built-in Liquid Retina XDR display on macOS 27.0.1. Other Mac, display, and OS combinations need confirmation. A display advertising EDR support may still have no extra brightness available under its current settings.
 
-### Next beta: brightness keys
+### Next beta: brightness keys and extra dimming
 
-The local 0.5.0 candidate (build 8) adds **Use Brightness Keys** to the menu. This is not included in the public 0.4.0 download. Enable it and allow Headroom in **System Settings → Privacy & Security → Accessibility** to control boost with the keyboard:
+The local 0.5.0 candidate (build 10) handles brightness keys automatically while running. This is not included in the public 0.4.0 download. On first use, Headroom requests Accessibility permission; allow it in **System Settings → Privacy & Security → Accessibility**. The menu reports when permission is needed. Once allowed:
 
-- **Brighter:** normal brightness works as usual. At maximum, release the key and press Up again to enter boost. Holding Up from below maximum does not accidentally cross into boost.
-- **Dimmer:** Down reduces boost, restores normal display settings at the boundary, then continues through macOS's normal brightness range.
+- **Brighter:** macOS handles normal brightness. At maximum, release the key and press Up again to enter boost.
+- **Dimmer:** at the lowest lit brightness step, release the key and press Down again to enter extra software dimming. Headroom leaves the backlight at that setting. Up reduces the dimming and restores the saved color tables before returning control to macOS.
+- **Back from boost:** Down reduces boost and restores the saved color tables before returning to macOS's normal range.
+- Holding a native brightness key never crosses into either extra range without a release and a fresh press. A held Down key stops at the lowest lit step; if the backlight is already at zero, Up remains with macOS to light it again.
 - **Smaller steps:** hold **Option + Shift** while pressing a brightness key.
 
-Boost adjustments request **Apple's system Display overlay**. macOS supplies its appearance and fade; Headroom supplies the bar position without adding a percentage or multiplier label. The bar represents a control position, not measured nits. There is no custom fallback if the system indicator is unavailable. Ordinary brightness keys remain under macOS control.
+Extra bright and dim adjustments use a compact **Display +** overlay built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older versions. It follows the native style with a white bar, tick marks, and sun icons, then fades after the key press. The bar represents a control position, not measured nits; no percentage or multiplier label is added. Ordinary brightness keys remain under macOS control.
+
+The candidate's per-display menu slider covers a table factor from 0.1 through 1 (normal) to the available boost ceiling, at most 2.0. Extra dimming scales the same saved original color tables downward and does not start the HDR carrier. A factor of 0.1 does not mean 10% of physical brightness.
 
 Keys target the built-in display when connected, otherwise the primary display; the per-display menu switches and sliders remain available. Keyboard control pauses while Lunar is running; Headroom never quits it for you. Physical-key repetition and the boundary handoff remain separate live checks. See the [validation record](VALIDATION.md) for results by build.
 
@@ -62,7 +66,7 @@ The slider controls a table multiplier up to 2.0, further limited by available h
 
 Headroom runs locally. It has no telemetry, account system, network client, or automatic updater. It does not request Screen Recording, camera, microphone, or Full Disk Access permissions. It installs no login item or permanent background service.
 
-The 0.4.0 release needs no Accessibility permission. In the development version, optional brightness-key control requires Accessibility; the menu controls work without it. Only brightness-key events are handled, and keystrokes are not recorded.
+The 0.4.0 release needs no Accessibility permission. In the development version, brightness-key handling starts automatically and requires Accessibility; the menu controls work without it. Only brightness-key events are handled, and keystrokes are not recorded.
 
 An update to an ad-hoc signed beta may require enabling Headroom in Accessibility again. These builds do not have a stable signing identity across versions; this is part of [macOS's app identity checks](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
 

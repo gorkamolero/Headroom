@@ -42,8 +42,20 @@ final class BoostSession {
     private var lastReply: TimeInterval = 0
     private var activeFrame = NSRect.zero
     private var activeDisplayID: UInt32 = 0
+    private var activeDimming: Bool?
+    private var restartAfterRestoration = false
+    var minimumFactor: Double { DisplayAdjustmentRange.minimumFactor }
+    /// Retain the active direction through restoration so key ownership never
+    /// changes direction merely because the user selected the normal midpoint.
+    var isDimming: Bool { activeDimming ?? (desiredFactor < 1) }
+    var supportsDimming: Bool {
+        let id = screenID(screen)
+        guard CGDisplayIsOnline(id) != 0, CGDisplayIsInMirrorSet(id) == 0 else { return false }
+        let capacity = CGDisplayGammaTableCapacity(id)
+        return capacity > 0 && capacity <= 65536
+    }
     var supportsBoost: Bool {
-        CGDisplayIsOnline(screenID(screen)) != 0 && CGDisplayIsInMirrorSet(screenID(screen)) == 0 && screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.01
+        supportsDimming && screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.01
     }
     var busy: Bool { child != nil || state == .preparing || state == .on || state == .stopping }
     var enabled: Bool { state == .on || state == .preparing }
@@ -58,11 +70,13 @@ final class BoostSession {
     }
 
     private static func ceiling(for screen: NSScreen) -> Double {
-        max(1, min(2, Double(screen.maximumPotentialExtendedDynamicRangeColorComponentValue)))
+        let potential = Double(screen.maximumPotentialExtendedDynamicRangeColorComponentValue)
+        return potential.isFinite ? max(1, min(DisplayAdjustmentRange.maximumFactor, potential)) : 1
     }
     private static func selectedLevel(for screen: NSScreen, uuid: String) -> Double {
         let initial = CGDisplayIsBuiltin(screenID(screen)) != 0 ? 1.45 : (screen.localizedName.contains("XDR") ? 1.75 : 1.2)
-        return min(ceiling(for: screen), max(1, UserDefaults.standard.object(forKey:"boost.\(uuid)") as? Double ?? initial))
+        let stored = UserDefaults.standard.object(forKey:"boost.\(uuid)") as? Double ?? initial
+        return min(ceiling(for: screen), max(DisplayAdjustmentRange.minimumFactor, stored.isFinite ? stored : initial))
     }
 
     private func note(_ event: String, _ extra: [String:Any] = [:]) {
@@ -75,12 +89,13 @@ final class BoostSession {
         do {
             let store = try RecoveryStore(directory:directory)
             let result = store.recoverAll()
-            if result.allSatisfy(\.succeeded) {state = .off; message = "Off"; errorMessage = nil}
+            if result.allSatisfy(\.succeeded) {state = .off; message = "Off"; errorMessage = nil; activeDimming = nil}
             else {state = .unavailable; message = "Recovery needs attention"; errorMessage = result.filter{!$0.succeeded}.map(\.message).joined(separator:" ")}
         } catch {state = .unavailable; message = "Another session or recovery is active"; errorMessage = error.localizedDescription}
     }
     func refreshAvailability() {
-        if !busy && !supportsBoost {state = .unavailable;message = "Extra brightness unavailable"}
+        if !busy && !supportsDimming {state = .unavailable;message = "Brightness adjustment unavailable"}
+        else if state == .off && !supportsBoost {message = "Dimming available; extra brightness unavailable"}
     }
     func updateScreen(_ incoming: NSScreen, reconnected: Bool) {
         if busy && (screenID(incoming) != activeDisplayID || incoming.frame != activeFrame) {
@@ -101,8 +116,23 @@ final class BoostSession {
     }
     func setLevel(_ value: Double) {
         guard value.isFinite else { return }
-        desiredFactor = min(maximumFactor,max(1,value))
+        desiredFactor = min(maximumFactor,max(minimumFactor,value))
         UserDefaults.standard.set(desiredFactor,forKey:"boost.\(uuid)")
+        if desiredFactor == 1 {
+            // At the midpoint the original table is sufficient. A normal stop
+            // also cancels a pending cross-mode restart.
+            if busy { stop(reason:"Off") }
+            update()
+            return
+        }
+        if enabled && (desiredFactor < 1) != isDimming {
+            // A fresh session is required when introducing/removing the HDR
+            // carrier. Do not capture a scaled table as the next baseline.
+            stop(reason:"Changing brightness range…")
+            if child != nil { restartAfterRestoration = true }
+            else { start() }
+            return
+        }
         pendingSet = true
         scheduleLevelUpdate()
         update()
@@ -126,20 +156,29 @@ final class BoostSession {
     }
     func start() {
         guard !busy else {return}
+        restartAfterRestoration = false
         recover()
         guard state != .unavailable else {update();return}
+        guard desiredFactor != 1 else { update(); return }
         let id = screenID(screen)
-        guard CGDisplayIsOnline(id) != 0, CGDisplayIsInMirrorSet(id) == 0,
-              screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.01 else {
-            state = .unavailable; message = "Extra brightness unavailable"; update();return
+        let dimming = desiredFactor < 1
+        guard supportsDimming, dimming || supportsBoost else {
+            state = .unavailable; message = dimming ? "Dimming unavailable" : "Extra brightness unavailable"; update();return
         }
         activeFrame = screen.frame; activeDisplayID = id
+        activeDimming = dimming
         token = UUID(); let attempt = token
         errorMessage = nil; stopMessage = nil; beginSent = false; pendingSet = false
-        state = .preparing; message = "Preparing brightness…"
+        state = .preparing; message = dimming ? "Preparing dimming…" : "Preparing brightness…"
         deadline = ProcessInfo.processInfo.systemUptime + 12
         do {
             fingerprint = try DisplayIdentity.capture(display:id).configuration
+            if dimming {
+                // Software dimming needs no HDR content or EDR-capable panel.
+                try launchGuard(attempt:attempt)
+                update()
+                return
+            }
             let activation = try HDRCarrier(screen:screen)
             carrier = activation
             activation.prepare { [weak self] result in
@@ -156,7 +195,8 @@ final class BoostSession {
         update()
     }
     private func allowedFactor() -> Double {
-        min(desiredFactor, maximumFactor, max(1,Double(screen.maximumExtendedDynamicRangeColorComponentValue)))
+        if isDimming { return min(1, max(minimumFactor, desiredFactor)) }
+        return min(desiredFactor, maximumFactor, max(1,Double(screen.maximumExtendedDynamicRangeColorComponentValue)))
     }
     private func launchGuard(attempt:UUID) throws {
         let executable = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("DisplayGuardian") ?? URL(fileURLWithPath:CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("DisplayGuardian")
@@ -181,9 +221,12 @@ final class BoostSession {
                 self.note("helper-exit",["status":process.terminationStatus])
                 self.clearGuard();self.carrier?.close();self.carrier = nil
                 let priorFailure = self.errorMessage, requestedStop = self.stopMessage
+                let restart = self.restartAfterRestoration
+                self.restartAfterRestoration = false
                 self.recover()
                 if self.state == .off {
                     if let failure = priorFailure {self.state = .unavailable;self.message = "Brightness paused";self.errorMessage = failure}
+                    else if restart { self.start(); return }
                     else {self.message = requestedStop ?? "Off"}
                 }
                 self.update()
@@ -216,7 +259,7 @@ final class BoostSession {
             let event = record["event"] as? String ?? "unknown", ok = record["ok"] as? Bool == true
             if event != "pong" && event != "renewed" {note("guardian",record)}
             if event == "ready" && ok && state == .preparing && !beginSent {
-                guard supportsBoost,
+                guard supportsDimming, isDimming || supportsBoost,
                       let identity = try? DisplayIdentity.capture(display: screenID(screen)),
                       identity.uuid == uuid, identity.configuration == fingerprint else {
                     fail("The selected display or its settings changed while preparing brightness.")
@@ -225,13 +268,19 @@ final class BoostSession {
                 beginSent = true;appliedFactor = allowedFactor();lastRequestedFactor = appliedFactor
                 send(["command":"begin","displayID":screenID(screen),"displayUUID":uuid,"factor":appliedFactor,"duration":30,"renewable":true])
             } else if event == "began" && ok && state == .preparing {
-                state = .on;message = "On";nextRenew = ProcessInfo.processInfo.systemUptime + 10;nextReadback = 0;update()
+                state = .on;message = isDimming ? "Dimming" : "Boosting";nextRenew = ProcessInfo.processInfo.systemUptime + 10;nextReadback = 0;update()
                 if pendingSet { scheduleLevelUpdate() }
             } else if event == "set" && ok {
                 appliedFactor = (record["factor"] as? NSNumber)?.doubleValue ?? lastRequestedFactor
             } else if event == "ended" {
-                if !ok {errorMessage = record["message"] as? String ?? "Restoration needs attention."}
-                stop(reason:ok ? "Off" : "Recovery needs attention")
+                if !ok {
+                    errorMessage = record["message"] as? String ?? "Restoration needs attention."
+                    restartAfterRestoration = false
+                }
+                // A successful acknowledgement of our own stop must not
+                // cancel the explicit cross-mode request waiting for exit.
+                // External stops still take the ordinary cancellation path.
+                if state != .stopping { stop(reason:ok ? "Off" : "Recovery needs attention") }
             } else if !ok {fail(record["message"] as? String ?? "The recovery guard rejected the change.")}
         }
     }
@@ -256,8 +305,10 @@ final class BoostSession {
             nextReadback = now + 2
             guard let identity = try? DisplayIdentity.capture(display:id), identity.uuid == uuid, identity.configuration == fingerprint else {stop(reason:"Paused after display settings changed");return}
         }
-        let headroom = Double(screen.maximumExtendedDynamicRangeColorComponentValue)
-        guard headroom > 1.01 else {stop(reason:"Extra brightness unavailable");return}
+        if !isDimming {
+            let headroom = Double(screen.maximumExtendedDynamicRangeColorComponentValue)
+            guard headroom.isFinite, headroom > 1.01 else {stop(reason:"Extra brightness unavailable");return}
+        }
         let factor = allowedFactor()
         if pendingSet || abs(factor-appliedFactor)>0.02 {
             applyPendingLevel()
@@ -265,6 +316,7 @@ final class BoostSession {
         if now >= nextRenew {nextRenew = now+10;send(["command":"renew"])}
     }
     func stop(reason:String) {
+        restartAfterRestoration = false
         levelTimer?.invalidate();levelTimer = nil;pendingSet = false
         carrier?.close();carrier = nil
         if state == .stopping {return}
@@ -272,12 +324,13 @@ final class BoostSession {
         if child != nil {
             state = .stopping;message = "Restoring…";deadline = ProcessInfo.processInfo.systemUptime+2;stopStage = 0
             send(["command":"stop"]);closeInput()
-        } else {token = UUID();state = .off;message = reason}
+        } else {token = UUID();state = .off;message = reason;activeDimming = nil}
         update()
     }
     private func fail(_ reason:String) {
+        restartAfterRestoration = false
         errorMessage = reason;note("error",["message":reason])
         if child != nil {stop(reason:"Brightness paused")}
-        else {carrier?.close();carrier = nil;token = UUID();state = .unavailable;message = "Extra brightness unavailable";update()}
+        else {carrier?.close();carrier = nil;token = UUID();state = .unavailable;message = "Brightness adjustment unavailable";update()}
     }
 }

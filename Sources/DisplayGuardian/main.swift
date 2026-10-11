@@ -62,10 +62,11 @@ final class Guardian {
             }
             switch request.command {
             case "begin":
-                guard journal == nil else { throw DisplayError.invalid("An experiment is already active.") }
+                guard journal == nil else { throw DisplayError.invalid("A brightness adjustment is already active.") }
                 guard try store.journalURLs().isEmpty else { throw DisplayError.invalid("Unresolved recovery journal exists; begin is blocked.") }
                 guard let display = request.displayID, let factor = request.factor, let duration = request.duration,
                       duration.isFinite, duration >= 1, duration <= 45 else { throw DisplayError.invalid("Begin requires displayID, factor, and duration between 1 and 45 seconds.") }
+                guard CGDisplayIsInMirrorSet(display) == 0 else { throw DisplayError.invalid("Mirrored displays cannot be adjusted independently.") }
                 let identity = try DisplayIdentity.capture(display: display)
                 if let expectedUUID = request.displayUUID {
                     guard UUID(uuidString: expectedUUID)?.uuidString == identity.uuid else {
@@ -99,11 +100,12 @@ final class Guardian {
                 try entry.recordReadback(readback)
                 journal = entry
                 try store.save(entry)
-                reply(["ok": true, "event": "began", "message": "Experimental transfer scaling is active under the guardian lease; luminance gain is not established by readback.", "displayID": display, "displayUUID": identity.uuid, "factor": factor, "duration": duration, "renewable": request.renewable ?? false, "baselineMaximum": baseline.maximum, "readbackMaximum": readback.maximum, "readbackDifference": readback.maxDifference(from: proposed), "baselineDifference": readback.maxDifference(from: baseline), "sampleCount": baseline.count, "journalPath": store.path(for: entry).path])
+                reply(["ok": true, "event": "began", "message": factor < 1 ? "Software dimming is active under the guardian lease." : "Experimental transfer scaling is active under the guardian lease; luminance gain is not established by readback.", "displayID": display, "displayUUID": identity.uuid, "factor": factor, "duration": duration, "renewable": request.renewable ?? false, "baselineMaximum": baseline.maximum, "readbackMaximum": readback.maximum, "readbackDifference": readback.maxDifference(from: proposed), "baselineDifference": readback.maxDifference(from: baseline), "sampleCount": baseline.count, "journalPath": store.path(for: entry).path])
             case "set":
                 guard !recoveryPending, displayLock != nil, var entry = journal, let factor = request.factor,
                       let display = DisplayIdentity.resolve(uuid: entry.identity.uuid) else { throw DisplayError.invalid("No connected display experiment is active.") }
                 let identity = try DisplayIdentity.capture(display: display)
+                guard CGDisplayIsInMirrorSet(display) == 0 else { throw DisplayError.invalid("The display is now mirrored.") }
                 guard identity.configuration == entry.identity.configuration else { throw DisplayError.invalid("Display mode or color profile changed.") }
                 let current = try GammaTable.read(display: display)
                 guard entry.owns(current) else { throw DisplayError.invalid("Another application changed the display transfer table.") }
@@ -121,7 +123,7 @@ final class Guardian {
                 try entry.recordReadback(readback)
                 journal = entry
                 try store.save(entry)
-                reply(["ok": true, "event": "set", "message": "Gain derived from the original baseline.", "factor": factor, "readbackMaximum": readback.maximum, "readbackDifference": readback.maxDifference(from: entry.proposed)])
+                reply(["ok": true, "event": "set", "message": "Adjustment derived from the original baseline.", "factor": factor, "readbackMaximum": readback.maximum, "readbackDifference": readback.maxDifference(from: entry.proposed)])
             case "ping": reply(["ok": true, "event": "pong", "message": "Guardian heartbeat received."])
             case "renew":
                 guard !recoveryPending, journal != nil, var currentLease = lease else { throw DisplayError.invalid("No active session can be renewed.") }
@@ -150,6 +152,7 @@ final class Guardian {
         if now - lastOwnershipCheck >= 1 {
             lastOwnershipCheck = now
             guard let display = DisplayIdentity.resolve(uuid: entry.identity.uuid) else { ended(reason: "disconnected"); return }
+            guard CGDisplayIsInMirrorSet(display) == 0 else { ended(reason: "mirrored"); return }
             do {
                 let identity = try DisplayIdentity.capture(display: display)
                 let table = try GammaTable.read(display: display)

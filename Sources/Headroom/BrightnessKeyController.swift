@@ -2,8 +2,8 @@ import AppKit
 import ApplicationServices
 import DisplayCore
 
-/// Owns only the extra range. Below the normal maximum macOS receives the
-/// original media-key events, retaining its HUD and backlight behavior.
+/// Owns the ranges beyond both hardware endpoints. Within the normal range
+/// macOS receives the original media-key events and controls the backlight.
 final class BrightnessKeyController {
     private struct Snapshot {
         let session: BoostSession
@@ -12,7 +12,19 @@ final class BrightnessKeyController {
         let ceiling: Double
         let normal: Double?
         let available: Bool
+        let dimmingAvailable: Bool
+        var mode: BrightnessAdjustmentMode
         let time: TimeInterval
+    }
+
+    private struct KeyOwnership {
+        let normal: Double
+        let mode: BrightnessAdjustmentMode
+
+        func mustRestore(after current: Double?) -> Bool {
+            guard let current, current.isFinite, current >= 0, current <= 1.0001 else { return true }
+            return mode == .dim ? current > normal + 0.002 : current < normal - 0.002
+        }
     }
 
     private let sessions: () -> [BoostSession]
@@ -20,6 +32,8 @@ final class BrightnessKeyController {
     private let reader = NormalBrightnessReader()
     private let hud = BrightnessHUD()
     private var timer: Timer?
+    private var nativeDownRead: (uuid: String, before: Double, after: TimeInterval, expires: TimeInterval)?
+    private var nativeDownReadTimer: Timer?
     private var snapshot: Snapshot?
     private var sequence = BrightnessKeySequence()
     private var pending: [(BoostSession, BrightnessKeyAction)] = []
@@ -27,14 +41,14 @@ final class BrightnessKeyController {
     private var flushing = false
     private var tapRunning = false
     private var suspended = false
-    private var keyOwned: [String: Double] = [:]
+    private var keyOwned: [String: KeyOwnership] = [:]
     private var lastPermissionCheck = -Double.infinity
     private var trusted = false
     private var conflict = false
     private var nextTapAttempt = 0.0
     var changed: (() -> Void)?
     private(set) var message = ""
-    var isEnabled: Bool { UserDefaults.standard.bool(forKey: "brightnessKeysEnabled") }
+    var isEnabled: Bool { true }
     var permissionRequired: Bool { isEnabled && !trusted }
 
     init(sessions: @escaping () -> [BoostSession]) {
@@ -50,29 +64,20 @@ final class BrightnessKeyController {
     }
 
     func startMonitoring() {
-        guard isEnabled, timer == nil else { return }
+        guard timer == nil else { return }
+        // Prompt once on first use. A rebuilt ad-hoc app can lose its old
+        // approval; report that in the menu without nagging on every launch.
+        if !UserDefaults.standard.bool(forKey: "accessibilityPromptShown") {
+            requestPermissionIfNeeded()
+        }
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.refresh() }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
         refresh()
     }
 
-    func setEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: "brightnessKeysEnabled")
-        if enabled {
-            suspended = false
-            requestPermissionIfNeeded()
-            startMonitoring()
-            refresh()
-        } else {
-            shutdown()
-            restoreKeySessions(reason: "Off")
-            setMessage("")
-        }
-        changed?()
-    }
-
     func requestPermissionIfNeeded() {
+        UserDefaults.standard.set(true, forKey: "accessibilityPromptShown")
         trusted = AXIsProcessTrusted()
         if !trusted {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -111,6 +116,8 @@ final class BrightnessKeyController {
     func cancelPending() {
         generation += 1
         pending.removeAll()
+        nativeDownRead = nil
+        nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
         sequence.reset()
         snapshot = nil
         hud.hide()
@@ -165,10 +172,31 @@ final class BrightnessKeyController {
         guard pending.isEmpty, !flushing else { return }
         guard let session = target() else { snapshot = nil; setMessage("No display for brightness keys"); return }
         let normal = reader.brightness(displayID: screenID(session.screen))
-        if let baseline = keyOwned[session.uuid], session.enabled,
-           normal == nil || normal! < baseline - 0.002 {
-            keyOwned.removeValue(forKey: session.uuid)
-            session.stop(reason: "Paused after system brightness changed")
+        if let awaiting = nativeDownRead {
+            if awaiting.uuid != session.uuid || now >= awaiting.expires {
+                // A missing/unchanged getter must not leave Down blocked if
+                // macOS ignored the original key event.
+                nativeDownRead = nil
+            } else if now < awaiting.after || normal == nil || abs(normal! - awaiting.before) < 0.000_001 {
+                // Do not forward another Down using the value from before the
+                // previous native event. Up still passes through immediately.
+                snapshot = nil
+                return
+            } else {
+                nativeDownRead = nil
+            }
+        }
+        let mode: BrightnessAdjustmentMode = session.isDimming ? .dim : .boost
+        if let ownership = keyOwned[session.uuid], session.enabled {
+            if ownership.mode != mode {
+                // A menu adjustment started a different mode; it no longer
+                // belongs to the old keyboard session.
+                keyOwned.removeValue(forKey: session.uuid)
+            } else if ownership.mustRestore(after: normal) {
+                keyOwned.removeValue(forKey: session.uuid)
+                hud.hide()
+                session.stop(reason: "Paused after system brightness changed")
+            }
         }
         if !session.busy { keyOwned.removeValue(forKey: session.uuid) }
         let state: BrightnessBoostState
@@ -179,11 +207,16 @@ final class BrightnessKeyController {
         case .stopping: state = .stopping
         case .unavailable: state = .unavailable
         }
-        let ceiling = session.state == .on
+        if let previous = snapshot, previous.state == .on || previous.state == .preparing,
+           !session.enabled {
+            hud.hide()
+        }
+        let ceiling = session.state == .on && mode == .boost
             ? min(session.maximumFactor, Double(session.screen.maximumExtendedDynamicRangeColorComponentValue))
             : session.maximumFactor
         snapshot = Snapshot(session: session, state: state, factor: session.desiredFactor,
-                            ceiling: ceiling, normal: normal, available: session.supportsBoost, time: now)
+                            ceiling: ceiling, normal: normal, available: session.supportsBoost,
+                            dimmingAvailable: session.supportsDimming, mode: mode, time: now)
         setMessage(normal == nil ? "Normal brightness unavailable on this display" : "")
     }
 
@@ -192,24 +225,58 @@ final class BrightnessKeyController {
             return sequence.route(event: event, state: .off, factor: 1, ceiling: 1,
                                   normalBrightness: nil, available: false) != .passthrough
         }
+        if !suspended, trusted, !conflict,
+           sequence.holdsNativeDownRepeat(event) || (event.direction == .down && nativeDownRead != nil) {
+            return sequence.route(event: event, state: .off, factor: 1, ceiling: 1,
+                normalBrightness: nil, available: false,
+                nativeDownReadPending: nativeDownRead != nil) != .passthrough
+        }
+        if event.direction == .up, nativeDownRead != nil {
+            nativeDownRead = nil
+            nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
+        }
         guard isEnabled, !suspended, trusted, !conflict,
               var current = snapshot,
               ProcessInfo.processInfo.systemUptime - current.time < 0.75 else {
             sequence.reset()
+            RunLoop.main.perform(inModes: [.common]) { [weak self] in self?.hud.hide() }
             return false
         }
         let action = sequence.route(event: event, state: current.state,
             factor: current.factor, ceiling: current.ceiling,
-            normalBrightness: current.normal, available: current.available)
+            normalBrightness: current.normal, available: current.available,
+            dimmingAvailable: current.dimmingAvailable, mode: current.mode)
         if action == .passthrough {
             // A native key can change the backlight immediately. Never use its
-            // old cached maximum for a fast subsequent Up press.
+            // old cached endpoint for a fast subsequent opposite press.
             snapshot = nil
-            RunLoop.main.perform(inModes:[.common]) { [weak self] in self?.refresh() }
+            if event.direction == .down, !event.hasUnsupportedModifiers,
+               current.state == .off, current.dimmingAvailable,
+               let normal = current.normal, normal > 0 {
+                let now = ProcessInfo.processInfo.systemUptime
+                nativeDownRead = (current.session.uuid, normal, now + 0.03, now + 0.35)
+                nativeDownReadTimer?.invalidate()
+                let timer = Timer(timeInterval: 0.035, repeats: false) { [weak self] _ in
+                    self?.nativeDownReadTimer = nil
+                    self?.refresh()
+                }
+                nativeDownReadTimer = timer
+                RunLoop.main.add(timer, forMode: .common)
+            } else if event.direction == .up {
+                nativeDownRead = nil
+                nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
+            }
+            RunLoop.main.perform(inModes:[.common]) { [weak self] in
+                self?.hud.hide()
+                self?.refresh()
+            }
             return false
         }
         switch action {
-        case .start(let factor): current.state = .preparing; current.factor = factor
+        case .start(let factor):
+            current.state = .preparing
+            current.factor = factor
+            current.mode = factor < 1 ? .dim : .boost
         case .set(let factor): current.factor = factor
         case .stop: current.state = .stopping; current.factor = 1
         default: break
@@ -251,15 +318,26 @@ final class BrightnessKeyController {
             guard epoch == generation else { break }
             switch action {
             case .start(let factor):
-                guard !session.busy, target() === session, session.supportsBoost,
-                      let normal = reader.brightness(displayID: screenID(session.screen)),
-                      normal >= 0.999 else { continue }
-                keyOwned[session.uuid] = normal
+                let mode: BrightnessAdjustmentMode = factor < 1 ? .dim : .boost
+                let normal = reader.brightness(displayID: screenID(session.screen))
+                guard !session.busy, target() === session,
+                      BrightnessKeyPolicy.canStart(mode: mode, normalBrightness: normal,
+                          available: mode == .dim ? session.supportsDimming : session.supportsBoost,
+                          ceiling: session.maximumFactor), let normal else { continue }
+                keyOwned[session.uuid] = KeyOwnership(normal: normal, mode: mode)
                 session.setLevel(factor)
                 session.start()
             case .set(let factor):
                 guard session.enabled else { continue }
-                if keyOwned[session.uuid] == nil { keyOwned[session.uuid] = snapshot?.normal ?? 1 }
+                if keyOwned[session.uuid] == nil {
+                    guard let normal = reader.brightness(displayID: screenID(session.screen)) else {
+                        session.stop(reason: "Paused because system brightness is unavailable")
+                        hud.hide()
+                        continue
+                    }
+                    keyOwned[session.uuid] = KeyOwnership(normal: normal,
+                        mode: session.isDimming ? .dim : .boost)
+                }
                 session.setLevel(factor)
             case .stop:
                 session.stop(reason: "Off")

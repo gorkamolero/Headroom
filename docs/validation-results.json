@@ -219,5 +219,124 @@
       },
       "scope": "35-second active menu-app sample with menu closed; excludes WindowServer and system GPU/power. Not a battery benchmark."
     }
+  },
+  "candidate050": {
+    "build": 10,
+    "scope": "Local candidate; public 0.4.0 archive unchanged. Physical keyboard end-to-end validation remains pending.",
+    "hud": {
+      "heading": "Display +",
+      "implementation": "AppKit glass panel with native SwiftUI slider",
+      "visiblyCaptured": true,
+      "pixelIdenticalComparison": false,
+      "lifecycleChecks": {
+        "autoDismissed": true,
+        "doesNotBecomeKey": true,
+        "explicitHide": true,
+        "ignoresMouse": true,
+        "initiallyVisible": true,
+        "panelReused": true,
+        "reshowDuringFadeOpaque": true,
+        "reshowDuringFadeVisible": true
+      }
+    },
+    "dimmingGuardian": {
+      "factors": [
+        0.95,
+        0.75,
+        0.9
+      ],
+      "hardwareBacklight": "unchanged",
+      "faultCases": [
+        {
+          "case": "stop",
+          "restorationMaxDifference": 0.0,
+          "remainingJournals": 0
+        },
+        {
+          "case": "parentEOF",
+          "restorationMaxDifference": 0.0,
+          "remainingJournals": 0
+        },
+        {
+          "case": "leaseExpiry",
+          "restorationMaxDifference": 0.0,
+          "remainingJournals": 0
+        },
+        {
+          "case": "deadline",
+          "restorationMaxDifference": 0.0,
+          "remainingJournals": 0
+        },
+        {
+          "case": "SIGTERM",
+          "restorationMaxDifference": 0.0,
+          "remainingJournals": 0
+        },
+        {
+          "case": "SIGKILL_then_recover",
+          "restorationMaxDifference": 0.0,
+          "remainingJournals": 0
+        }
+      ],
+      "allRequestedTablesMatchedBaselineScaling": true,
+      "finalRestorationMaximumSampleDifference": 0.0,
+      "remainingJournals": 0,
+      "passed": true
+    },
+    "crossModeSession": {
+      "error": null,
+      "finalRestorationMaxDifference": 0,
+      "liveApplicationSession": true,
+      "passed": true,
+      "remainingJournals": 0,
+      "stages": [
+        {
+          "difference": 0,
+          "event": "originalBeforeNextSession",
+          "stage": 0
+        },
+        {
+          "baselineDifference": 0,
+          "event": "active",
+          "expectedTableDifference": 0,
+          "factor": 0.9,
+          "isDimming": true,
+          "stage": 0
+        },
+        {
+          "difference": 0,
+          "event": "originalBeforeNextSession",
+          "stage": 1
+        },
+        {
+          "baselineDifference": 0,
+          "event": "active",
+          "expectedTableDifference": 0,
+          "factor": 1.1,
+          "isDimming": false,
+          "stage": 1
+        },
+        {
+          "difference": 0,
+          "event": "originalBeforeNextSession",
+          "stage": 2
+        },
+        {
+          "baselineDifference": 0,
+          "event": "active",
+          "expectedTableDifference": 0,
+          "factor": 0.85,
+          "isDimming": true,
+          "stage": 2
+        }
+      ]
+    },
+    "unitTestsPassed": 79,
+    "releaseBuildPassed": true,
+    "deepStrictSignatureVerified": true,
+    "installedBuild": 10,
+    "guiBrightnessTapEnabledAfterRelaunch": true,
+    "keyboardOptInMenuItemAbsent": true,
+    "repeatedLaunchPromptRemoved": true
   }
 }

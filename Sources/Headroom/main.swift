@@ -22,7 +22,7 @@ final class DisplayRow:NSView {
     let name = NSTextField(labelWithString:"")
     let detail = NSTextField(labelWithString:"")
     let toggle = NSSwitch()
-    let slider = NSSlider(value:1,minValue:1,maxValue:2,target:nil,action:nil)
+    let slider = NSSlider(value:1,minValue:DisplayAdjustmentRange.minimumFactor,maxValue:2,target:nil,action:nil)
     weak var session: BoostSession?
     override var allowsVibrancy: Bool { true }
 
@@ -41,13 +41,13 @@ final class DisplayRow:NSView {
         detail.lineBreakMode = .byTruncatingTail
         toggle.controlSize = .small
         toggle.target = self;toggle.action = #selector(toggled)
-        toggle.setAccessibilityLabel("Brightness boost for \(session.screen.localizedName)")
+        toggle.setAccessibilityLabel("Brightness adjustment for \(session.screen.localizedName)")
         slider.controlSize = .small
         slider.target = self;slider.action = #selector(slid);slider.isContinuous = true
-        slider.setAccessibilityLabel("Boost level for \(session.screen.localizedName)")
+        slider.setAccessibilityLabel("Brightness level for \(session.screen.localizedName)")
         let low = NSImageView(), high = NSImageView()
-        low.image = NSImage(systemSymbolName:"sun.min",accessibilityDescription:"Minimum boost")
-        high.image = NSImage(systemSymbolName:"sun.max.fill",accessibilityDescription:"Maximum boost")
+        low.image = NSImage(systemSymbolName:"sun.min",accessibilityDescription:"Dimmer")
+        high.image = NSImage(systemSymbolName:"sun.max.fill",accessibilityDescription:"Brighter")
         for icon in [low,high] {icon.contentTintColor = .secondaryLabelColor;icon.imageScaling = .scaleProportionallyDown}
         for view in [name,detail,toggle,slider,low,high] {view.translatesAutoresizingMaskIntoConstraints = false;addSubview(view)}
         NSLayoutConstraint.activate([
@@ -72,10 +72,10 @@ final class DisplayRow:NSView {
         detail.setAccessibilityValue(session.detail)
         detail.textColor = session.state == .unavailable ? .systemOrange : .secondaryLabelColor
         toggle.state = session.enabled ? .on : .off
-        toggle.isEnabled = session.state != .stopping && (session.enabled || session.supportsBoost)
-        slider.minValue = 1;slider.maxValue = max(1.01,session.maximumFactor)
+        toggle.isEnabled = session.state != .stopping && (session.enabled || session.supportsBoost || session.supportsDimming)
+        slider.minValue = session.minimumFactor;slider.maxValue = session.maximumFactor
         slider.doubleValue = session.desiredFactor
-        slider.isEnabled = session.state != .stopping && session.supportsBoost && session.maximumFactor > 1.01
+        slider.isEnabled = session.state != .stopping && (session.supportsBoost || session.supportsDimming)
     }
 }
 
@@ -92,7 +92,6 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
     let recoveryRoot = FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Headroom/Recovery",isDirectory:true)
     let recoveryNotice = NSTextField(wrappingLabelWithString:"")
     lazy var brightnessKeys = BrightnessKeyController { [weak self] in Array(self?.sessions.values ?? [:].values) }
-    var keysItem: NSMenuItem?
     var keysStatusItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification:Notification){
@@ -142,9 +141,6 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         if let option = CommandLine.arguments.firstIndex(of:"--resume-display"), CommandLine.arguments.indices.contains(option+1),
            let session = sessions[CommandLine.arguments[option+1]] {session.start()}
         if CommandLine.arguments.contains("--show") {RunLoop.main.perform(inModes:[.default]) {self.show()}}
-        if CommandLine.arguments.contains("--enable-brightness-keys") {
-            RunLoop.main.perform(inModes:[.default]) {self.brightnessKeys.setEnabled(true)}
-        }
     }
     func applicationShouldHandleReopen(_ sender:NSApplication, hasVisibleWindows flag:Bool)->Bool {
         RunLoop.main.perform(inModes:[.default]) {self.show()}
@@ -211,8 +207,6 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
             let off = NSMenuItem(title:"Turn All Off",action:#selector(turnAllOff),keyEquivalent:"")
             off.target = self;menu.addItem(off)
         }
-        let keys = NSMenuItem(title:"Use Brightness Keys",action:#selector(toggleBrightnessKeys),keyEquivalent:"")
-        keys.target = self;menu.addItem(keys);keysItem = keys
         let keyStatus = NSMenuItem(title:"",action:#selector(openKeyPermissions),keyEquivalent:"")
         keyStatus.target = self;menu.addItem(keyStatus);keysStatusItem = keyStatus
         updateKeyMenu()
@@ -233,18 +227,12 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         let on = sessions.values.filter{$0.enabled}.count
         status?.button?.image = on>0 ? HeadroomIcon.on : HeadroomIcon.off
         status?.button?.toolTip = on>0 ? "Headroom · \(on) display\(on == 1 ? "":"s") on" : "Headroom · off"
-        status?.button?.setAccessibilityValue(on>0 ? "Brightness boost on" : "Brightness boost off")
+        status?.button?.setAccessibilityValue(on>0 ? "Brightness adjustment on" : "Brightness adjustment off")
     }
     func updateKeyMenu() {
-        keysItem?.state = brightnessKeys.isEnabled ? .on : .off
         keysStatusItem?.title = brightnessKeys.message
-        keysStatusItem?.isHidden = brightnessKeys.message.isEmpty || !brightnessKeys.isEnabled
+        keysStatusItem?.isHidden = brightnessKeys.message.isEmpty
         keysStatusItem?.isEnabled = brightnessKeys.permissionRequired
-    }
-    @objc func toggleBrightnessKeys() {
-        // Permission UI is opened after menu tracking finishes.
-        let enabled = !brightnessKeys.isEnabled
-        RunLoop.main.perform(inModes:[.default]) {self.brightnessKeys.setEnabled(enabled)}
     }
     @objc func openKeyPermissions() {
         RunLoop.main.perform(inModes:[.default]) {self.brightnessKeys.openAccessibilitySettings()}
@@ -258,7 +246,7 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         let alert = NSAlert()
         let version = Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "Development"
         alert.messageText = "Headroom \(version)"
-        alert.informativeText = "More brightness from compatible XDR displays.\nBy Gorka Molero · Community beta\n\nYour original display settings are saved before boosting and checked when restored. Headroom runs locally, without screen recording, accounts or analytics.\n\nBrightness and compatibility depend on your Mac and its settings. Physical luminance, colour accuracy and battery impact have not been measured." + (recoveryNotice.stringValue.isEmpty ? "" : "\n\n" + recoveryNotice.stringValue)
+        alert.informativeText = "Extra dimming and more brightness from compatible displays.\nBy Gorka Molero · Community beta\n\nYour original display settings are saved before adjustment and checked when restored. Headroom runs locally, without screen recording, accounts or analytics.\n\nBrightness and compatibility depend on your Mac and its settings. Physical luminance, colour accuracy and battery impact have not been measured." + (recoveryNotice.stringValue.isEmpty ? "" : "\n\n" + recoveryNotice.stringValue)
         if let icon = Bundle.main.url(forResource:"AppIcon",withExtension:"icns").flatMap(NSImage.init(contentsOf:)) {alert.icon = icon}
         alert.addButton(withTitle:"Done")
         alert.addButton(withTitle:"Project & Help")
@@ -303,7 +291,7 @@ if CommandLine.arguments.contains("--diagnose-brightness-keys") {
     // GUI's enabled event tap is stronger evidence than this process's AX bit.
     let report: [String:Any] = ["diagnosticProcessAccessibility": AXIsProcessTrusted(),
         "runningAppBrightnessTapEnabled": activeTap,
-        "nativeBrightnessIndicatorAvailable": NativeBrightnessOSD.isAvailable, "displays": displays]
+        "brightnessIndicator": "appKitGlassPanel", "displays": displays]
     if let data = try? JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]) {
         print(String(decoding:data,as:UTF8.self))
     }

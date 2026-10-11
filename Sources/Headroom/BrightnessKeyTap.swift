@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import DisplayCore
 
-/// An optional active filter for display-brightness buttons only. Ownership and
+/// An active filter for display-brightness buttons only. Ownership and
 /// all callbacks stay on the main run loop; ordinary keyboard events are never
 /// included in this tap's event mask. Permission is requested by the UI, not here.
 final class BrightnessKeyTap {

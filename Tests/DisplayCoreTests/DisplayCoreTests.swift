@@ -96,6 +96,57 @@ final class DisplayCoreTests: XCTestCase {
         XCTAssertEqual(high.maximum, 1.5)
         XCTAssertEqual(try original.scaled(factor: 1), original)
     }
+    func testDimmingKeepsChannelShapeAndUsesImmutableBaseline() throws {
+        let original = try baseline()
+        let first = try original.scaled(factor: 0.4)
+        let second = try original.scaled(factor: 0.8)
+        XCTAssertEqual(first.red[2], 0.28, accuracy: 0.00001)
+        XCTAssertEqual(first.green[2], 0.288, accuracy: 0.00001)
+        XCTAssertEqual(second.blue[2], 0.544, accuracy: 0.00001)
+        XCTAssertEqual(second.maximum, 0.8, accuracy: 0.00001)
+        XCTAssertEqual(original.maximum, 1)
+        let floor = try original.scaled(factor: Float(DisplayAdjustmentRange.minimumFactor))
+        XCTAssertEqual(floor.maximum, 0.1, accuracy: 0.00001)
+    }
+    func testDimmingCrashBeforeReadbackRestoresExactOriginal() throws {
+        let original = try baseline(), fake = FakeDisplay(try baseline())
+        let proposed = try original.scaled(factor: 0.1)
+        let entry = RecoveryJournal(identity: try fake.identity(display: fake.displayID), baseline: original, proposed: proposed)
+        let store = try makeStore(directory: directory())
+        try store.save(entry)
+        fake.table = proposed
+        let outcomes = store.recoverAll(access: fake)
+        XCTAssertEqual(outcomes.map(\.status), ["restored"])
+        XCTAssertEqual(outcomes.first?.difference, 0)
+        XCTAssertEqual(fake.table, original)
+        XCTAssertTrue(try store.journalURLs().isEmpty)
+    }
+    func testRepeatedDimmingUpdatesRestoreSavedOriginalRatherThanDividingReadback() throws {
+        let original = try baseline(), fake = FakeDisplay(try baseline())
+        var entry = RecoveryJournal(identity: try fake.identity(display: fake.displayID), baseline: original, proposed: try original.scaled(factor: 0.5))
+        let store = try makeStore(directory: directory())
+        for factor: Float in [0.5, 0.1, 0.75, 0.2] {
+            entry.proposed = try entry.baseline.scaled(factor: factor)
+            try store.save(entry)
+            fake.table = entry.proposed
+            try entry.recordReadback(fake.table)
+            try store.save(entry)
+            XCTAssertEqual(fake.table.maximum, factor, accuracy: 0.00001)
+        }
+        XCTAssertEqual(store.recoverAll(access: fake).first?.status, "restored")
+        XCTAssertEqual(fake.table, original)
+        XCTAssertTrue(try store.journalURLs().isEmpty)
+    }
+    func testDimmingRecoveryDoesNotOverwriteAnExternalDimmer() throws {
+        let original = try baseline(), fake = FakeDisplay(try baseline())
+        let entry = RecoveryJournal(identity: try fake.identity(display: fake.displayID), baseline: original, proposed: try original.scaled(factor: 0.4))
+        let store = try makeStore(directory: directory())
+        try store.save(entry)
+        fake.table = try original.scaled(factor: 0.6)
+        XCTAssertEqual(store.recoverAll(access: fake).first?.status, "conflict")
+        XCTAssertTrue(fake.writes.isEmpty)
+        XCTAssertEqual(try store.journalURLs().count, 1)
+    }
     func testMaximumFactorClampedReadbackRestoresExactOriginalIncludingLostHighlights() throws {
         let original = try baseline(), fake = FakeDisplay(try baseline())
         let proposal = try original.scaled(factor: 2)
@@ -128,7 +179,7 @@ final class DisplayCoreTests: XCTestCase {
         XCTAssertThrowsError(try GammaTable(red: [.nan], green: [0], blue: [0]))
         XCTAssertThrowsError(try GammaTable(red: [-0.1], green: [0], blue: [0]))
         let original = try baseline()
-        for factor: Float in [0, 0.9, 2.01, .infinity, .nan] { XCTAssertThrowsError(try original.scaled(factor: factor)) }
+        for factor: Float in [-0.1, 0, 0.099, 2.01, .infinity, .nan] { XCTAssertThrowsError(try original.scaled(factor: factor)) }
         let malformed = Data(#"{"red":[0],"green":[0,1],"blue":[0]}"#.utf8)
         XCTAssertThrowsError(try JSONDecoder().decode(GammaTable.self, from: malformed))
     }

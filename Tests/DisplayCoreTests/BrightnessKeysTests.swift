@@ -27,10 +27,13 @@ final class BrightnessKeysTests: XCTestCase {
         factor: Double = 1,
         ceiling: Double = 2,
         normal: Double? = 1,
-        available: Bool = true
+        available: Bool = true,
+        dimmingAvailable: Bool = false,
+        mode: BrightnessAdjustmentMode? = nil
     ) -> BrightnessKeyAction {
         BrightnessKeyPolicy.action(event: event, state: state, factor: factor, ceiling: ceiling,
-                                   normalBrightness: normal, available: available)
+                                   normalBrightness: normal, available: available,
+                                   dimmingAvailable: dimmingAvailable, mode: mode)
     }
 
     private func route(
@@ -38,10 +41,15 @@ final class BrightnessKeysTests: XCTestCase {
         through sequence: inout BrightnessKeySequence,
         state: BrightnessBoostState = .off,
         factor: Double = 1,
-        normal: Double? = 1
+        normal: Double? = 1,
+        dimmingAvailable: Bool = true,
+        mode: BrightnessAdjustmentMode? = nil,
+        nativeDownReadPending: Bool = false
     ) -> BrightnessKeyAction {
         sequence.route(event: event, state: state, factor: factor, ceiling: 2,
-                       normalBrightness: normal, available: true)
+                       normalBrightness: normal, available: true,
+                       dimmingAvailable: dimmingAvailable, mode: mode,
+                       nativeDownReadPending: nativeDownReadPending)
     }
 
     func testMediaKeyParserDistinguishesDirectionReleaseAndRepeat() {
@@ -143,7 +151,7 @@ final class BrightnessKeysTests: XCTestCase {
         XCTAssertEqual(action(event(repeated: true), state: .on, factor: 2), .consume)
         XCTAssertEqual(action(event(), state: .on, factor: 2, ceiling: 1.5), .set(1.5))
         XCTAssertEqual(action(event(.down), state: .on, factor: 2, ceiling: 1.5), .set(1.4375))
-        XCTAssertEqual(action(event(.down), state: .on, factor: 0.5), .stop)
+        XCTAssertEqual(action(event(.down), state: .on, factor: 0.5, mode: .boost), .stop)
     }
 
     func testInvalidActiveValuesRequestRestorationInsteadOfSendingInvalidFactors() {
@@ -249,4 +257,156 @@ final class BrightnessKeysTests: XCTestCase {
         XCTAssertEqual(route(event(repeated: true), through: &sequence, state: .on, factor: 1.5625), .set(1.625))
         XCTAssertEqual(route(event(phase: .up), through: &sequence, state: .on, factor: 1.625), .consume)
     }
+
+    func testFreshDownAtLitNativeStepStartsDimmingWithoutEDRHeadroom() {
+        for minimum in [0.01, 0.015625, 0.0625, 0.0635] {
+            XCTAssertEqual(action(event(.down), ceiling: 1, normal: minimum,
+                                  available: false, dimmingAvailable: true), .start(0.9375))
+        }
+        XCTAssertEqual(action(event(.down, fine: true), ceiling: 1, normal: 0.0625,
+                              available: false, dimmingAvailable: true), .start(0.984375))
+    }
+
+    func testDimmingRequiresConfirmedMinimumAndItsOwnAvailability() {
+        let invalid: [Double?] = [nil, .nan, .infinity, -.infinity, -0.0001, 0, 0.0636, 0.5, 1, 1.2]
+        for brightness in invalid {
+            XCTAssertEqual(action(event(.down), normal: brightness, dimmingAvailable: true), .passthrough)
+        }
+        XCTAssertEqual(action(event(.down), normal: 0.0625, dimmingAvailable: false), .passthrough)
+        XCTAssertEqual(action(event(.down), state: .unavailable, normal: 0.0625, dimmingAvailable: true), .passthrough)
+        XCTAssertEqual(action(event(.down, repeated: true), normal: 0.0625, dimmingAvailable: true), .passthrough)
+        XCTAssertEqual(action(event(.down, unsupported: true), normal: 0.0625, dimmingAvailable: true), .passthrough)
+    }
+
+    func testNormalRangeRemainsNativeWithBothExtraRangesAvailable() {
+        for brightness in [0.0636, 0.5, 0.9989] {
+            for direction in [BrightnessDirection.up, .down] {
+                XCTAssertEqual(action(event(direction), normal: brightness, dimmingAvailable: true), .passthrough)
+            }
+        }
+        XCTAssertEqual(action(event(), normal: 0.0625, dimmingAvailable: true), .passthrough)
+        XCTAssertEqual(action(event(.down), normal: 1, dimmingAvailable: true), .passthrough)
+    }
+
+    func testDimmingSupportsRepeatsAndFineAdjustmentWhilePreparingOrOn() {
+        for state in [BrightnessBoostState.preparing, .on] {
+            XCTAssertEqual(action(event(.down, repeated: true), state: state, factor: 0.5, ceiling: 1), .set(0.4375))
+            XCTAssertEqual(action(event(repeated: true), state: state, factor: 0.5, ceiling: 1), .set(0.5625))
+            XCTAssertEqual(action(event(.down, fine: true), state: state, factor: 0.5, ceiling: 1), .set(0.484375))
+            XCTAssertEqual(action(event(fine: true), state: state, factor: 0.5, ceiling: 1), .set(0.515625))
+        }
+    }
+
+    func testDimmingClampsAtVisibleFloorAndDoesNotRepeatedlyWriteIt() {
+        XCTAssertEqual(action(event(.down), state: .on, factor: 0.125, ceiling: 1), .set(0.1))
+        XCTAssertEqual(action(event(.down, repeated: true), state: .on, factor: 0.1, ceiling: 1), .consume)
+        XCTAssertEqual(action(event(), state: .on, factor: 0.1, ceiling: 1), .set(0.1625))
+        XCTAssertEqual(action(event(.down), state: .on, factor: 0.05, ceiling: 1), .set(0.1))
+        for invalid in [0.0, -0.1, Double.nan, .infinity, -.infinity] {
+            XCTAssertEqual(action(event(.down), state: .on, factor: invalid, ceiling: 1, mode: .dim), .stop)
+        }
+    }
+
+    func testDimmingRestoresBeforeUpCanRaiseHardwareBrightness() {
+        for state in [BrightnessBoostState.preparing, .on] {
+            XCTAssertEqual(action(event(), state: state, factor: 0.9375, ceiling: 1), .stop)
+            XCTAssertEqual(action(event(), state: state, factor: 0.98, ceiling: 1), .stop)
+            XCTAssertEqual(action(event(fine: true), state: state, factor: 0.984375, ceiling: 1), .stop)
+            XCTAssertEqual(action(event(), state: state, factor: 1, ceiling: 1, mode: .dim), .stop)
+        }
+        XCTAssertEqual(action(event(), state: .stopping, factor: 1, ceiling: 1, mode: .dim), .consume)
+    }
+
+    func testExplicitModePreventsCrossingBetweenDimmingAndBoostWithoutRestoration() {
+        XCTAssertEqual(action(event(), state: .on, factor: 1.2, mode: .dim), .stop)
+        XCTAssertEqual(action(event(.down), state: .on, factor: 0.8, mode: .boost), .stop)
+        XCTAssertEqual(action(event(.down), state: .on, factor: 1, ceiling: 1, mode: .dim), .set(0.9375))
+        XCTAssertEqual(action(event(.down), state: .on, factor: 1, mode: .boost), .stop)
+    }
+
+    func testFreshReadBeforeStartUsesTheSameEndpointRules() {
+        XCTAssertTrue(BrightnessKeyPolicy.canStart(mode: .dim, normalBrightness: 0.0625, available: true, ceiling: 1))
+        XCTAssertFalse(BrightnessKeyPolicy.canStart(mode: .dim, normalBrightness: 0.08, available: true, ceiling: 2))
+        XCTAssertTrue(BrightnessKeyPolicy.canStart(mode: .boost, normalBrightness: 1, available: true, ceiling: 2))
+        XCTAssertFalse(BrightnessKeyPolicy.canStart(mode: .boost, normalBrightness: 0.98, available: true, ceiling: 2))
+    }
+
+    func testNativeHeldDownStaysNativeUntilReleaseAndNewPressAtMinimum() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(.down), through: &sequence, normal: 0.1), .passthrough)
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, state: .on, factor: 0.5, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down, phase: .up), through: &sequence, normal: 0.0625), .passthrough)
+        XCTAssertEqual(route(event(.down), through: &sequence, normal: 0.0625), .start(0.9375))
+    }
+
+    func testOwnedDimmingRepeatsAdjustAndReleaseIsConsumedOnce() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(.down), through: &sequence, normal: 0.0625), .start(0.9375))
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, state: .preparing, factor: 0.9375, normal: 0.0625), .set(0.875))
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, state: .on, factor: 0.875, normal: 0.0625), .set(0.8125))
+        XCTAssertEqual(route(event(.down, phase: .up), through: &sequence, state: .on, factor: 0.8125, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down, phase: .up), through: &sequence, state: .on, factor: 0.8125, normal: 0.0625), .passthrough)
+    }
+
+    func testHeldUpWaitsForDimmingRestorationThenReturnsToNativeWithoutReplay() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(), through: &sequence, state: .on, factor: 0.9375, normal: 0.0625), .stop)
+        XCTAssertEqual(route(event(repeated: true), through: &sequence, state: .stopping, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(repeated: true), through: &sequence, state: .off, normal: 0.0625), .passthrough)
+        XCTAssertEqual(route(event(repeated: true), through: &sequence, normal: 0.1), .passthrough)
+        XCTAssertEqual(route(event(phase: .up), through: &sequence, normal: 0.1), .passthrough)
+    }
+
+    func testDimmingUpReleaseBeforeHandoffRemainsConsumedAfterRestoration() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(), through: &sequence, state: .on, factor: 0.9375, normal: 0.0625), .stop)
+        XCTAssertEqual(route(event(phase: .up), through: &sequence, state: .off, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(), through: &sequence, state: .off, normal: 0.0625), .passthrough)
+    }
+
+    func testHeldDownStaysConsumedIfDimmingStopsUnexpectedly() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(.down), through: &sequence, state: .on, factor: 0.1, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, state: .stopping, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, state: .off, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down, phase: .up), through: &sequence, state: .off, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down), through: &sequence, state: .off, normal: 0.0625), .start(0.9375))
+    }
+
+    func testUnsupportedModifierDoesNotTriggerNativeActionDuringDimmingHandoff() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(), through: &sequence, state: .on, factor: 0.9375, normal: 0.0625), .stop)
+        XCTAssertEqual(route(event(repeated: true, unsupported: true), through: &sequence, state: .off, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(repeated: true), through: &sequence, state: .off, normal: 0.0625), .passthrough)
+        XCTAssertEqual(route(event(phase: .up), through: &sequence, normal: 0.0625), .passthrough)
+    }
+
+
+    func testHardwareZeroCannotStartDimmingBecauseTheBacklightIsOff() {
+        XCTAssertEqual(action(event(.down), normal: 0, dimmingAvailable: true), .passthrough)
+        XCTAssertEqual(action(event(), normal: 0, dimmingAvailable: true), .passthrough)
+    }
+
+    func testNativeDownRepeatWaitsForFreshReadWithoutStealingItsRelease() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(.down), through: &sequence, normal: 0.125), .passthrough)
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, normal: 0.125,
+                             nativeDownReadPending: true), .consume)
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, normal: 0.0625), .consume)
+        // Once clamped, a missing/stale normal read cannot forward more Down repeats.
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, normal: nil), .consume)
+        XCTAssertEqual(route(event(.down, phase: .up), through: &sequence, normal: 0.0625), .passthrough)
+        XCTAssertEqual(route(event(.down), through: &sequence, normal: 0.0625), .start(0.9375))
+    }
+
+    func testFreshDownDuringReadSettlingKeepsItsOwnPairConsumed() {
+        var sequence = BrightnessKeySequence()
+        XCTAssertEqual(route(event(.down), through: &sequence, normal: 0.125,
+                             nativeDownReadPending: true), .consume)
+        XCTAssertEqual(route(event(.down, repeated: true), through: &sequence, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down, phase: .up), through: &sequence, normal: 0.0625), .consume)
+        XCTAssertEqual(route(event(.down), through: &sequence, normal: 0.0625), .start(0.9375))
+    }
+
 }
