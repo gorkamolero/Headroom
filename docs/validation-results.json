@@ -592,6 +592,9 @@
     "gammaRestorationMaximumDifference": 0,
     "nativeRestorationDifference": 0,
     "remainingJournals": 0,
-    "physicalKeyboardEndToEndVerified": false
+    "physicalKeyboardEndToEndVerified": false,
+    "runningGuiBrightnessTapEnabled": true,
+    "priorSelectedBoostRestored": true,
+    "installedApplicationPathVerified": true
   }
 }
