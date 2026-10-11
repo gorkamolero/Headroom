@@ -24,4 +24,16 @@ Outputs include `harness-result.json`, `watchdog-result.json`, `harness.log`, an
 
 ## Read-only nits overlay check
 
-Run `bash Tests/Integration/build-luminance.sh`, then open the generated `Evidence/nits-build17/NitsHUDCheck.app`. It does not change display settings or request keyboard permission. It checks the production nits reader, live HUD updates without additional key events, a simulated dimming estimate, dismissal, focus, panel reuse, and unchanged display tables. After three seconds it writes `hud-check.json` beside the app and shows the live native reading for a short visual check before quitting automatically. The dimming sample is a calculation test; it does not measure emitted light.
+Run `bash Tests/Integration/build-luminance.sh`, then open the generated `Evidence/nits-build18/NitsHUDCheck.app`. It does not change display settings or request keyboard permission. It checks the production nits reader, live HUD updates without additional key events, simulated dimming and boost estimates, reduced headroom, dismissal, focus, panel reuse, and unchanged display tables. After four seconds it writes `hud-check.json` beside the app and shows the live native reading for a short visual check before quitting automatically. The dimming and boost samples are calculation tests; they do not measure emitted light.
+
+## Bounded live nits session
+
+`bash Tests/Integration/build-luminance-session.sh` builds a focused production-session trial and the existing external watchdog. After quitting Headroom and Lunar and confirming restoration, run:
+
+```sh
+Evidence/nits-session/Watchdog \
+  "$PWD/Evidence/nits-session/LuminanceSession.app/Contents/MacOS/LuminanceSession" \
+  "$PWD/Evidence/nits-session/run-01"
+```
+
+Use a fresh output directory for each run. This briefly applies factors 1.1 and 1.2, checks actual table readback and acknowledged nits updates, then restores. It limits the active trial to 20 seconds and verifies unavailable transitional readings, native-brightness preservation, exact original gamma restoration, and no remaining journals. The external watchdog repeats recovery and native readback. `luminance-session-result.json` contains the model inputs and checks; this is not a photometer test. Private baseline and diagnostic logs stay local.

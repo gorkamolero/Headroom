@@ -3,10 +3,23 @@ import CoreFoundation
 import ObjectiveC
 import Darwin
 
-protocol DisplayLuminanceReading {
+struct DisplayLuminanceReadingSnapshot {
     /// System-derived native luminance, before Headroom's transfer-table scale.
     /// This is a calculated reference, not a physical light measurement.
+    let referenceNits: Double
+    /// Active preset's HDR limit, when it is valid for that same SDR reference.
+    let maximumHDRNits: Double?
+}
+
+protocol DisplayLuminanceReading {
+    func reading(displayID: UInt32) -> DisplayLuminanceReadingSnapshot?
     func referenceNits(displayID: UInt32) -> Double?
+}
+
+extension DisplayLuminanceReading {
+    func referenceNits(displayID: UInt32) -> Double? {
+        reading(displayID: displayID)?.referenceNits
+    }
 }
 
 /// Read-only compatibility boundary for Apple's native luminance reporting.
@@ -45,20 +58,8 @@ final class DisplayLuminanceReader: DisplayLuminanceReading {
         )
     }
 
-    func referenceNits(displayID: UInt32) -> Double? {
-        guard displayID != 0, let getLinearBrightness else { return nil }
-        var linearBrightness = Float.nan
-        guard getLinearBrightness(displayID, &linearBrightness) == 0,
-              linearBrightness.isFinite, linearBrightness >= 0,
-              let maximumSDRNits = maximumSDRNits(displayID: displayID) else {
-            return nil
-        }
-        let nits = Double(linearBrightness) * maximumSDRNits
-        return nits.isFinite && nits >= 0 ? nits : nil
-    }
-
-    private func maximumSDRNits(displayID: UInt32) -> Double? {
-        guard monitorPanel != nil,
+    func reading(displayID: UInt32) -> DisplayLuminanceReadingSnapshot? {
+        guard displayID != 0, let getLinearBrightness, monitorPanel != nil,
               let managerClass = NSClassFromString("MPDisplayMgr"),
               let manager = object(managerClass as AnyObject, selector: "sharedMgr"),
               let tryLockMethod = checkedMethod(manager, selector: "tryLockAccess",
@@ -84,9 +85,28 @@ final class DisplayLuminanceReader: DisplayLuminanceReading {
                                        Int32(bitPattern: displayID))?.takeUnretainedValue(),
               let preset = object(display, selector: "activePreset"),
               let dictionary = object(preset, selector: "presetDictionary") as? [String: Any],
-              let maximum = dictionary["PresetMaxSDRLuminance"] as? NSNumber,
-              CFGetTypeID(maximum) != CFBooleanGetTypeID() else { return nil }
-        let nits = maximum.doubleValue
+              let maximumSDRNits = positiveNits(dictionary["PresetMaxSDRLuminance"]) else {
+            return nil
+        }
+
+        // Capture the linear reading and both preset limits within one manager
+        // access. Never combine independently cached SDR and HDR presets.
+        var linearBrightness = Float.nan
+        guard getLinearBrightness(displayID, &linearBrightness) == 0,
+              linearBrightness.isFinite, linearBrightness >= 0 else { return nil }
+        let referenceNits = Double(linearBrightness) * maximumSDRNits
+        guard referenceNits.isFinite, referenceNits >= 0 else { return nil }
+
+        let maximumHDRNits = positiveNits(dictionary["PresetMaxHDRLuminance"])
+            .flatMap { $0 >= maximumSDRNits ? $0 : nil }
+        return DisplayLuminanceReadingSnapshot(referenceNits: referenceNits,
+                                              maximumHDRNits: maximumHDRNits)
+    }
+
+    private func positiveNits(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let nits = number.doubleValue
         return nits.isFinite && nits > 0 ? nits : nil
     }
 

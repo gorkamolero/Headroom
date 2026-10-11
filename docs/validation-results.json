@@ -772,5 +772,80 @@
     "installedBuild": 17,
     "runningInstalledKeyTapEnabled": true,
     "permissionRefresh": "Completed through System Settings after macOS authentication; running GUI key tap verified enabled."
+  },
+  "candidate050Build18": {
+    "recordedDate": "2026-10-11",
+    "scope": "Display + modeled nits; installed local candidate with running GUI brightness-key tap verified enabled.",
+    "unitTestsPassed": 107,
+    "luminanceUnitTestsPassed": 19,
+    "modelIsUncalibrated": true,
+    "physicalLuminanceMeasured": false,
+    "readOnlyHUDChecks": {
+      "autoDismissed": true,
+      "boostLabel": true,
+      "boostReadoutUpdates": true,
+      "clickThrough": true,
+      "dimmingEstimateUpdates": true,
+      "dismissedStopsPolling": true,
+      "displayTablesUnchanged": true,
+      "doesNotTakeFocus": true,
+      "fallingHeadroomUpdatesWithoutKeyEvent": true,
+      "hiddenStopsPolling": true,
+      "invalidDisplayUnavailable": true,
+      "nativeReadout": true,
+      "noHeadroomReturnsNativeEstimate": true,
+      "panelReused": true,
+      "updatesWithoutAnotherKeyEvent": true,
+      "visible": true
+    },
+    "liveBoostSessionChecks": {
+      "acknowledged-1.1-withinCurrentBounds": true,
+      "acknowledged-1.2-withinCurrentBounds": true,
+      "boostEstimateUpdatesLive": true,
+      "completedWithinActiveDeadline": true,
+      "nativeBrightnessRestored": true,
+      "nativeBrightnessUnchangedDuringTrial": true,
+      "nativeNitsAvailable": true,
+      "noRecoveryJournals": true,
+      "offNitsAvailableAfterRestoration": true,
+      "originalGammaRestoredExactly": true,
+      "pendingTargetKeepsAcknowledgedNits": true,
+      "preparingNitsUnavailable": true,
+      "stoppingNitsUnavailable": true
+    },
+    "liveSamples": [
+      {
+        "acknowledgedFactor": 1.1,
+        "currentCeilingNits": 461.8837921573231,
+        "currentHeadroom": 1.2000000476837158,
+        "displayText": "\u2248393 nits",
+        "estimatedNits": 392.6012114038772,
+        "maximumControlFactor": 2,
+        "name": "acknowledged-1.1",
+        "nativeBrightness": 0.9841545820236206,
+        "presetMaximumHDRNits": 1600,
+        "referenceNits": 384.9031448364258
+      },
+      {
+        "acknowledgedFactor": 1.2,
+        "currentCeilingNits": 461.8837921573231,
+        "currentHeadroom": 1.2000000476837158,
+        "displayText": "\u2248400 nits",
+        "estimatedNits": 400.29927797132854,
+        "maximumControlFactor": 2,
+        "name": "acknowledged-1.2",
+        "nativeBrightness": 0.9841545820236206,
+        "presetMaximumHDRNits": 1600,
+        "referenceNits": 384.9031448364258
+      }
+    ],
+    "gammaRestorationMaximumDifference": 0,
+    "nativeRestorationDifference": 0,
+    "remainingJournals": 0,
+    "independentWatchdogPassed": true,
+    "releaseBuildAndDeepStrictSignaturePassed": true,
+    "installedBuild": 18,
+    "runningInstalledKeyTapEnabled": true,
+    "permissionRefresh": "Completed through System Settings after macOS authentication; running GUI brightness-key tap verified enabled."
   }
 }

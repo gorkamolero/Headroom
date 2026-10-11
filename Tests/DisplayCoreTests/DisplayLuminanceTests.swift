@@ -59,7 +59,7 @@ final class DisplayLuminanceTests: XCTestCase {
         }
     }
 
-    func testBoostDoesNotMultiplyOrExposeNativeReferenceAsCurrentNits() {
+    func testBoostWithoutContextDoesNotInventAnEstimate() {
         for factor in [0.5, 1, 1.5, 2] {
             let value = DisplayLuminance(referenceNits: 400.2, appliedFactor: factor, boostActive: true)
             XCTAssertNil(value.nits)
@@ -67,6 +67,132 @@ final class DisplayLuminanceTests: XCTestCase {
             XCTAssertEqual(value.text, "— nits")
         }
         XCTAssertNil(DisplayLuminance(referenceNits: 400.2, appliedFactor: 1.1).nits)
+    }
+
+    func testBoostInterpolatesContinuouslyFromNativeToAvailablePeak() throws {
+        let context = DisplayLuminance.BoostContext(currentHeadroom: 3,
+                                                   maximumHDRNits: 1600,
+                                                   maximumFactor: 2)
+        let native = DisplayLuminance(referenceNits: 400, appliedFactor: 1)
+        for (factor, expected) in [(1.0, 400.0), (1.5, 800), (2.0, 1200)] {
+            let value = DisplayLuminance(referenceNits: 400, appliedFactor: factor,
+                                         boostActive: true, boostContext: context)
+            XCTAssertEqual(try XCTUnwrap(value.nits), expected, accuracy: 0.000001)
+            XCTAssertTrue(value.text.hasPrefix("≈"))
+            XCTAssertTrue(value.explanation.contains("Uncalibrated"))
+            XCTAssertTrue(value.explanation.contains("not a physical luminance measurement"))
+        }
+        XCTAssertEqual(DisplayLuminance(referenceNits: 400, appliedFactor: 1,
+                        boostActive: true, boostContext: context).nits, native.nits)
+    }
+
+    func testHeadroomDropLowersEstimateWithoutRenormalizingBoostPosition() throws {
+        // The configured range stays at 2 even when current headroom falls.
+        // At halfway boost, available headroom 1.2 yields 440, not 480 nits.
+        let context = DisplayLuminance.BoostContext(currentHeadroom: 1.2,
+                                                   maximumHDRNits: 1600,
+                                                   maximumFactor: 2)
+        let value = DisplayLuminance(referenceNits: 400, appliedFactor: 1.5,
+                                     boostActive: true, boostContext: context)
+        XCTAssertEqual(try XCTUnwrap(value.nits), 440, accuracy: 0.000001)
+    }
+
+    func testBoostUsesHDRLimitAsCeilingNotAnAdditionalMultiplier() throws {
+        let context = DisplayLuminance.BoostContext(currentHeadroom: 8,
+                                                   maximumHDRNits: 1600,
+                                                   maximumFactor: 2)
+        let middle = DisplayLuminance(referenceNits: 600, appliedFactor: 1.5,
+                                      boostActive: true, boostContext: context)
+        let top = DisplayLuminance(referenceNits: 600, appliedFactor: 2,
+                                   boostActive: true, boostContext: context)
+        XCTAssertEqual(try XCTUnwrap(middle.nits), 1100, accuracy: 0.000001)
+        XCTAssertEqual(top.nits, 1600)
+    }
+
+    func testBoostNeverInventsGainWhenCurrentHeadroomIsOne() {
+        let context = DisplayLuminance.BoostContext(currentHeadroom: 1,
+                                                   maximumHDRNits: 1600,
+                                                   maximumFactor: 2)
+        for factor in [1.0, 1.5, 2, 3] {
+            XCTAssertEqual(DisplayLuminance(referenceNits: 400, appliedFactor: factor,
+                            boostActive: true, boostContext: context).nits, 400)
+        }
+    }
+
+    func testBoostIsMonotonicWithAppliedFactorHeadroomAndNativeReference() throws {
+        func estimate(reference: Double, factor: Double, headroom: Double) throws -> Double {
+            try XCTUnwrap(DisplayLuminance(referenceNits: reference, appliedFactor: factor,
+                boostActive: true, boostContext: .init(currentHeadroom: headroom,
+                    maximumHDRNits: 1600, maximumFactor: 2)).nits)
+        }
+        var previousFactor = 0.0
+        var previousHeadroom = 0.0
+        var previousReference = 0.0
+        for step in 0...100 {
+            let factorValue = try estimate(reference: 400, factor: 1 + Double(step) / 100, headroom: 3)
+            let headroomValue = try estimate(reference: 400, factor: 1.5, headroom: 1 + Double(step) / 10)
+            let referenceValue = try estimate(reference: Double(step) * 10, factor: 1.5, headroom: 3)
+            XCTAssertGreaterThanOrEqual(factorValue, previousFactor)
+            XCTAssertGreaterThanOrEqual(headroomValue, previousHeadroom)
+            XCTAssertGreaterThanOrEqual(referenceValue, previousReference)
+            XCTAssertLessThanOrEqual(max(factorValue, headroomValue, referenceValue), 1600)
+            previousFactor = factorValue
+            previousHeadroom = headroomValue
+            previousReference = referenceValue
+        }
+    }
+
+    func testBoostClampsPastConfiguredMaximumAndAvoidsOverflow() {
+        let context = DisplayLuminance.BoostContext(currentHeadroom: 3,
+                                                   maximumHDRNits: 1600,
+                                                   maximumFactor: 2)
+        for factor in [2.0, 3, Double.greatestFiniteMagnitude] {
+            XCTAssertEqual(DisplayLuminance(referenceNits: 400, appliedFactor: factor,
+                            boostActive: true, boostContext: context).nits, 1200)
+        }
+        let extreme = DisplayLuminance(referenceNits: 400, appliedFactor: 2,
+            boostActive: true, boostContext: .init(currentHeadroom: .greatestFiniteMagnitude,
+                maximumHDRNits: 1600, maximumFactor: 2))
+        XCTAssertEqual(extreme.nits, 1600)
+    }
+
+    func testInvalidBoostContextIsUnavailable() {
+        var contexts: [DisplayLuminance.BoostContext] = []
+        for invalid: Double in [-1, 0, 0.5, .infinity, -.infinity, .nan] {
+            contexts.append(.init(currentHeadroom: invalid, maximumHDRNits: 1600, maximumFactor: 2))
+        }
+        for invalid: Double in [-1, 0, 399, .infinity, -.infinity, .nan] {
+            contexts.append(.init(currentHeadroom: 3, maximumHDRNits: invalid, maximumFactor: 2))
+        }
+        for invalid: Double in [-1, 0, 0.5, 1, .infinity, -.infinity, .nan] {
+            contexts.append(.init(currentHeadroom: 3, maximumHDRNits: 1600, maximumFactor: invalid))
+        }
+        for context in contexts {
+            for factor in [1.0, 1.5, 2] {
+                let value = DisplayLuminance(referenceNits: 400, appliedFactor: factor,
+                                             boostActive: true, boostContext: context)
+                XCTAssertNil(value.nits)
+                XCTAssertEqual(value.text, "— nits")
+            }
+        }
+    }
+
+    func testBoostContextCannotTurnInvalidOrInactiveAdjustmentsIntoBoost() {
+        let context = DisplayLuminance.BoostContext(currentHeadroom: 3,
+                                                   maximumHDRNits: 1600,
+                                                   maximumFactor: 2)
+        for factor: Double in [-1, 0, 0.5, .infinity, -.infinity, .nan] {
+            XCTAssertNil(DisplayLuminance(referenceNits: 400, appliedFactor: factor,
+                            boostActive: true, boostContext: context).nits)
+        }
+        for reference: Double? in [nil, -1, .infinity, -.infinity, .nan] {
+            XCTAssertNil(DisplayLuminance(referenceNits: reference, appliedFactor: 1.5,
+                            boostActive: true, boostContext: context).nits)
+        }
+        XCTAssertNil(DisplayLuminance(referenceNits: 400, appliedFactor: 1.5,
+                        boostContext: context).nits)
+        XCTAssertEqual(DisplayLuminance(referenceNits: 400, appliedFactor: 1,
+                        boostContext: context).nits, 400)
     }
 
     func testUnknownDimmingResponseDoesNotPreventNativeReadout() {

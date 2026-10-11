@@ -15,6 +15,8 @@ enum LuminanceHUDCheck {
         var reads = 0
         var reference = 400.2
         var appliedFactor = 1.0
+        var boostActive = false
+        var headroom = 3.0
         var readsAtHide = 0
         func after(_ delay: Double, _ body: @escaping () -> Void) {
             let timer = Timer(timeInterval: delay, repeats: false) { _ in body() }
@@ -29,11 +31,16 @@ enum LuminanceHUDCheck {
             let baseline = try? GammaTable.read(display: displayID)
             func show() {
                 hud.show(screen: screen, presentation: BrightnessHUDPresentation(
-                    title: "Display", level: 0.5, lowerBoundary: 0.125, upperBoundary: 0.875,
-                    luminance: DisplayLuminance(referenceNits: reference, appliedFactor: appliedFactor)),
+                    title: boostActive ? "Display +" : "Display", level: boostActive ? 0.9375 : 0.5,
+                    lowerBoundary: 0.125, upperBoundary: 0.875,
+                    luminance: DisplayLuminance(referenceNits: reference, appliedFactor: appliedFactor,
+                        boostActive: boostActive, boostContext: .init(currentHeadroom: headroom,
+                            maximumHDRNits: 1600, maximumFactor: 2))),
                     readLuminance: {
                         reads += 1
-                        return DisplayLuminance(referenceNits: reference, appliedFactor: appliedFactor)
+                        return DisplayLuminance(referenceNits: reference, appliedFactor: appliedFactor,
+                            boostActive: boostActive, boostContext: .init(currentHeadroom: headroom,
+                                maximumHDRNits: 1600, maximumFactor: 2))
                     })
             }
             show()
@@ -59,11 +66,31 @@ enum LuminanceHUDCheck {
                 reference = 400.2
                 show()
             }
-            after(2.75) {
+            after(1.15) {
+                boostActive = true
+                appliedFactor = 1.5
+                show()
+            }
+            after(1.4) {
+                checks["boostReadoutUpdates"] = hud.presentation?.luminance.text == "≈800 nits"
+                checks["boostLabel"] = hud.presentation?.title == "Display +"
+                headroom = 2
+            }
+            after(1.65) {
+                checks["fallingHeadroomUpdatesWithoutKeyEvent"] = hud.presentation?.luminance.text == "≈600 nits"
+                headroom = 1
+            }
+            after(1.9) {
+                checks["noHeadroomReturnsNativeEstimate"] = hud.presentation?.luminance.text == "≈400 nits"
+                boostActive = false
+                appliedFactor = 1
+                show()
+            }
+            after(3.7) {
                 checks["autoDismissed"] = panel()?.isVisible == false
                 readsAtHide = reads
             }
-            after(3) {
+            after(3.95) {
                 checks["dismissedStopsPolling"] = reads == readsAtHide
                 checks["panelReused"] = app.windows.filter { $0.title == "Headroom Brightness" }.count == 1
                 checks["invalidDisplayUnavailable"] = reader.referenceNits(displayID: 0) == nil
@@ -82,7 +109,7 @@ enum LuminanceHUDCheck {
                 hud.showPreview(screen: screen, level: 0.875, duration: 40,
                     luminance: DisplayLuminance(referenceNits: liveNits, appliedFactor: 1))
             }
-            after(44) { hud.hide(); app.terminate(nil) }
+            after(45) { hud.hide(); app.terminate(nil) }
         }
         app.run()
     }

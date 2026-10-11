@@ -323,9 +323,12 @@ if CommandLine.arguments.contains("--diagnose-brightness-keys") {
     let reader = NormalBrightnessReader()
     let luminanceReader = DisplayLuminanceReader()
     let displays: [[String:Any]] = NSScreen.screens.map { screen in
-        ["name": screen.localizedName, "builtIn": CGDisplayIsBuiltin(screenID(screen)) != 0,
+        let reading = luminanceReader.reading(displayID: screenID(screen))
+        return ["name": screen.localizedName, "builtIn": CGDisplayIsBuiltin(screenID(screen)) != 0,
          "normalBrightness": reader.brightness(displayID:screenID(screen)).map { $0 as Any } ?? NSNull(),
-         "referenceNits": luminanceReader.referenceNits(displayID:screenID(screen)).map { $0 as Any } ?? NSNull()]
+         "referenceNits": reading.map { $0.referenceNits as Any } ?? NSNull(),
+         "maximumHDRNits": reading?.maximumHDRNits.map { $0 as Any } ?? NSNull(),
+         "currentEDRHeadroom": Double(screen.maximumExtendedDynamicRangeColorComponentValue)]
     }
     var tapCount: UInt32 = 0
     var activeTap = false

@@ -35,7 +35,7 @@ final class BoostSession {
     private var appliedFactor = 1.0
     private var confirmedFactor: Double?
     private let luminanceReader: any DisplayLuminanceReading
-    private var referenceNits: Double?
+    private var luminanceReading: DisplayLuminanceReadingSnapshot?
     private var nextLuminanceRead = -Double.infinity
     private var pendingSet = false
     private var levelTimer: Timer?
@@ -115,20 +115,26 @@ final class BoostSession {
         update()
     }
     var detail: String { errorMessage ?? message }
-    /// Read the actual native brightness, then apply only a confirmed dimming
-    /// factor. Requested/queued values are never presented as display readback.
+    /// Read native brightness and model only acknowledged adjustments. The
+    /// boost estimate uses current headroom, never the display's potential range.
     var luminance: DisplayLuminance {
         let now = ProcessInfo.processInfo.systemUptime
         if now >= nextLuminanceRead {
-            referenceNits = luminanceReader.referenceNits(displayID: screenID(screen))
+            luminanceReading = luminanceReader.reading(displayID: screenID(screen))
             nextLuminanceRead = now + 0.1
         }
         switch state {
         case .off:
-            return DisplayLuminance(referenceNits: referenceNits, appliedFactor: 1)
+            return DisplayLuminance(referenceNits: luminanceReading?.referenceNits, appliedFactor: 1)
         case .on:
-            return DisplayLuminance(referenceNits: referenceNits,
-                appliedFactor: confirmedFactor ?? .nan, boostActive: !isDimming)
+            let boostContext = luminanceReading?.maximumHDRNits.map {
+                DisplayLuminance.BoostContext(
+                    currentHeadroom: Double(screen.maximumExtendedDynamicRangeColorComponentValue),
+                    maximumHDRNits: $0, maximumFactor: maximumFactor)
+            }
+            return DisplayLuminance(referenceNits: luminanceReading?.referenceNits,
+                appliedFactor: confirmedFactor ?? .nan, boostActive: !isDimming,
+                boostContext: boostContext)
         case .preparing, .stopping, .unavailable:
             return DisplayLuminance(referenceNits: nil, appliedFactor: 1)
         }
@@ -295,7 +301,7 @@ final class BoostSession {
                 beginSent = true;appliedFactor = allowedFactor();lastRequestedFactor = appliedFactor
                 send(["command":"begin","displayID":screenID(screen),"displayUUID":uuid,"factor":appliedFactor,"duration":30,"renewable":true])
             } else if event == "began" && ok && state == .preparing {
-                confirmedFactor = (record["factor"] as? NSNumber)?.doubleValue ?? lastRequestedFactor
+                confirmedFactor = (record["factor"] as? NSNumber)?.doubleValue
                 state = .on;message = isDimming ? "Dimming" : "Boosting";nextRenew = ProcessInfo.processInfo.systemUptime + 10;nextReadback = 0;update()
                 if pendingSet { scheduleLevelUpdate() }
             } else if event == "set" && ok {

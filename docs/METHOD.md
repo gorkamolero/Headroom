@@ -60,15 +60,31 @@ Headroom presents one panel labeled Display −, Display, or Display + across su
 
 Physical media-key repetition and restoration handoff remain separate live checks; [validation](../VALIDATION.md) records results by build. Updated ad-hoc builds may need Accessibility approval again because their code identity changes; Headroom keeps the normal macOS permission and signature checks.
 
-## Estimated nits — local build 17
+## Estimated nits — local build 18
 
-The overlay and per-display menu show approximate SDR-white luminance. A separate read-only `DisplayLuminanceReader` adapter dynamically loads `DisplayServicesGetLinearBrightness` and MonitorPanel's active-preset getters. It validates private Objective-C method signatures before calling them and takes only a nonblocking manager lock, with a matching unlock. Missing symbols, changed signatures, a busy manager, or invalid readings produce no estimate. These private APIs have no public compatibility guarantee and do not change brightness, presets, or automatic-brightness settings.
+The overlay and per-display menu show approximate white luminance. A separate read-only `DisplayLuminanceReader` adapter dynamically loads `DisplayServicesGetLinearBrightness` and MonitorPanel's active-preset getters. It validates private Objective-C method signatures before calling them and takes only a nonblocking manager lock, with a matching unlock. The SDR and HDR limits come from the same active-preset dictionary, with linear brightness read during that access; independently cached preset values are never combined. Missing symbols, changed signatures, a busy manager, or invalid native readings produce no estimate. Invalid HDR metadata leaves the native and dimmed estimates available but prevents the boost model. These private APIs have no public compatibility guarantee and do not change brightness, presets, or automatic-brightness settings.
 
 The native calculation is `linear brightness × PresetMaxSDRLuminance`. The SDR maximum comes from that display's active preset; no model-specific maximum or HDR maximum is substituted. The readout refreshes while its UI is visible: every 100 ms for the overlay, and with the menu's refresh timer.
 
 For confirmed extra dimming, the estimate applies the inverse sRGB response to the acknowledged table factor `m`: `m / 12.92` below or at 0.04045, otherwise `((m + 0.055) / 1.055)^2.4`. The result multiplies the native nits reference. Apple documents Display P3's sRGB transfer function, but this is still an assumption about the complete display pipeline, not a calibration. Tooltip text explains that limitation. A table factor of 0.5 therefore is not presented as a measured 50% luminance ratio.
 
-Every numeric label starts with **≈**. The label becomes **— nits** when unsupported, during extra brightness, or while a session is preparing, stopping, or awaiting recovery. Queued adjustment targets are never used as confirmed nits. Neither EDR headroom nor boost factors provide a reliable conversion to physical luminance. No light meter is used; color accuracy, ambient adaptation, and physical brightness remain separate validation work.
+Build 18 adds an uncalibrated model for confirmed extra brightness. Define:
+
+- `B`: the live native nits reference calculated above.
+- `H`: the display's **current** EDR headroom, never potential headroom.
+- `M`: `PresetMaxHDRLuminance` from the same active preset as the SDR reference.
+- `F`: the session's configured maximum table factor (`session.maximumFactor`).
+- `f`: the table factor acknowledged by `DisplayGuardian`, not a queued target.
+
+```text
+p = clamp((f - 1) / (F - 1), 0, 1)
+C = min(M, B × H)
+estimated nits = B + p × (C - B)
+```
+
+The estimate joins the native reference at a factor of 1 and moves toward capacity `C` as the confirmed adjustment reaches its configured maximum. When current headroom falls, the modeled ceiling falls too. There is no hardcoded display maximum. Apple's [tone-mapping documentation](https://developer.apple.com/documentation/metal/performing-your-own-tone-mapping) supports using SDR-white luminance and current EDR headroom to describe available rendering capacity. It does **not** establish this interpolation or the physical response of Headroom's transfer-table changes. `C` is a capacity bound for the model, not proof that Headroom reaches it or sustains it across the full screen. The table factor is never treated as a direct luminance multiplier.
+
+Every numeric label starts with **≈**, and the boost tooltip identifies the value as an uncalibrated model. The label becomes **— nits** when required metadata is unsupported or a session is preparing, stopping, or awaiting recovery. Queued adjustment targets are never used as confirmed nits. No light meter is used; color accuracy, ambient adaptation, sustained full-screen luminance, and physical brightness remain separate validation work. Build 17's earlier native and dimmed estimates intentionally displayed **— nits** during boost; build 18 extends that behavior with the model above. Neither version is included in the public 0.4.0 release.
 
 ## Scope of the safeguards
 

@@ -3,6 +3,22 @@ import Foundation
 /// An SDR-white estimate from a system-derived reference, not a photometer
 /// measurement or the luminance of every pixel on the screen.
 public struct DisplayLuminance: Equatable, Sendable {
+    /// Capabilities used by the uncalibrated boost model. Headroom describes
+    /// the current display state; maximumFactor is the configured control
+    /// range, which must not shrink when current headroom changes.
+    public struct BoostContext: Equatable, Sendable {
+        public let currentHeadroom: Double
+        public let maximumHDRNits: Double
+        public let maximumFactor: Double
+
+        public init(currentHeadroom: Double, maximumHDRNits: Double,
+                    maximumFactor: Double) {
+            self.currentHeadroom = currentHeadroom
+            self.maximumHDRNits = maximumHDRNits
+            self.maximumFactor = maximumFactor
+        }
+    }
+
     /// A stated assumption about the output response after transfer-table
     /// scaling. The display profile alone does not calibrate this whole path.
     public enum DimmingTransfer: Equatable, Sendable {
@@ -41,21 +57,46 @@ public struct DisplayLuminance: Equatable, Sendable {
     /// This motivates the default assumption; it does not validate the panel's
     /// final luminance after a Core Graphics transfer-table change.
     public init(referenceNits: Double?, appliedFactor: Double,
-                boostActive: Bool = false, dimmingTransfer: DimmingTransfer? = .sRGB) {
+                boostActive: Bool = false, dimmingTransfer: DimmingTransfer? = .sRGB,
+                boostContext: BoostContext? = nil) {
         self.referenceNits = referenceNits.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
         guard appliedFactor.isFinite, appliedFactor >= 0 else {
             nits = nil
             explanation = "Nits unavailable: the applied brightness adjustment is unknown."
             return
         }
-        guard !boostActive, appliedFactor <= 1 else {
-            nits = nil
-            explanation = "Nits unavailable during extra brightness: transfer-table scaling and EDR headroom do not establish actual luminance."
-            return
-        }
         guard let reference = self.referenceNits else {
             nits = nil
             explanation = "Nits unavailable: macOS did not provide a usable linear brightness and SDR reference for this display."
+            return
+        }
+        if boostActive {
+            guard appliedFactor >= 1, let context = boostContext,
+                  context.currentHeadroom.isFinite, context.currentHeadroom >= 1,
+                  context.maximumHDRNits.isFinite, context.maximumHDRNits > 0,
+                  context.maximumHDRNits >= reference,
+                  context.maximumFactor.isFinite, context.maximumFactor > 1 else {
+                nits = nil
+                explanation = "Nits unavailable during extra brightness: a valid applied boost, current EDR headroom, HDR preset limit, and configured boost range are required."
+                return
+            }
+
+            // Apple defines EDR headroom as peak white / SDR reference white.
+            // That bounds capacity, not the response to a gamma-table change.
+            // Interpolating the confirmed control position within that bound
+            // is our stated model; it is not a measured transfer function.
+            // Compare before multiplying to avoid overflow on extreme inputs.
+            let ceiling = reference > 0 && context.currentHeadroom >= context.maximumHDRNits / reference
+                ? context.maximumHDRNits
+                : reference * context.currentHeadroom
+            let progress = min(1, max(0, (appliedFactor - 1) / (context.maximumFactor - 1)))
+            nits = min(ceiling, reference + progress * (ceiling - reference))
+            explanation = "Uncalibrated boost estimate: an assumed response interpolates the confirmed boost position from native SDR white to the available HDR ceiling, bounded by current EDR headroom and the preset HDR limit. This models display capability; it is not a physical luminance measurement or a calibrated transfer-table response."
+            return
+        }
+        guard appliedFactor <= 1 else {
+            nits = nil
+            explanation = "Nits unavailable: an applied boost requires an active boost session and its display context."
             return
         }
         guard appliedFactor < 1 else {

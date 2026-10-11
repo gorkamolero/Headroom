@@ -1,3 +1,10 @@
+# Headroom 0.5.0 — local candidate, build 18
+
+- Added **≈ nits** for **Display +** in the overlay and per-display menu. An uncalibrated model interpolates from live native nits toward the lower of current EDR capacity and the active preset's HDR limit, according to the recovery helper's confirmed adjustment. It stays continuous at the normal/boost boundary and lowers its ceiling when current headroom drops. The tooltip identifies the model; this is not an optical measurement or a claim of sustained full-screen brightness.
+- The read-only compatibility adapter now reads SDR and HDR limits from the same active-preset dictionary alongside linear brightness. Missing or invalid HDR metadata leaves native and dimmed nits available but makes boost nits unavailable. The calculation uses no hardcoded display maximum or potential-headroom substitute. Preparation, restoration, pending recovery, and unsupported readings still show **— nits**.
+
+Build 18 is a local candidate; installation and validation status are recorded separately in [VALIDATION.md](../VALIDATION.md). The public 0.4.0 download is unchanged. See the [model and its assumptions](METHOD.md#estimated-nits--local-build-18).
+
 # Headroom 0.5.0 — local candidate, build 17
 
 - Added a live **≈ nits** estimate at the upper right of the brightness overlay and in each display's menu controls. It uses the Mac's linear brightness reading and that display's active SDR preset maximum. Extra dimming includes an explicitly assumed sRGB response to confirmed table changes. Unsupported readings, boost, preparation, restoration, and pending recovery display **— nits**. These are calculated estimates, not physical light-meter measurements.
