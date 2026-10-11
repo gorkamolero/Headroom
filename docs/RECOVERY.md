@@ -4,13 +4,15 @@
 
 Switch a display **off** in Headroom to restore its saved original color tables. **Quit Headroom** restores every active display before exiting. A brief “Restoring…” state means the app is waiting for its recovery helper to finish.
 
+In the keyboard-control candidate, the hardware brightness you selected remains at its last setting after disable or quit. Restoration removes temporary gamma adjustments; it does not undo your ordinary brightness selection.
+
 If the menu app crashes, the helper detects the closed connection or missing heartbeat and attempts restoration. If both processes are interrupted, reopen Headroom with the affected display connected. It checks saved recovery records before allowing a new adjustment session.
 
 Do not delete recovery data while a session is active or while recovery needs attention: that data contains the exact tables needed for restoration.
 
 ## The menu says extra brightness is unavailable
 
-A display can support EDR without currently having headroom available. Its preset, system brightness, mirroring, macOS behavior, and other display settings can affect availability. Headroom remains off if preparation fails or the current headroom is insufficient. It does not silently change your display preset or normal brightness control.
+A display can support EDR without currently having headroom available. Its preset, system brightness, mirroring, macOS behavior, and other display settings can affect availability. Headroom remains off if preparation fails or the current headroom is insufficient. It does not change your display preset or automatic-brightness preference to enable boost.
 
 ## The menu says recovery needs attention
 
@@ -24,15 +26,15 @@ There is no universal “reset everything” action in normal recovery. Resettin
 
 Keyboard control is a development feature, not part of the 0.4.0 download. It starts automatically with Headroom. The app requests Accessibility permission once on first use; allow Headroom under **System Settings → Privacy & Security → Accessibility**. The menu reports when permission is missing. Its switches and sliders remain usable without this permission; Screen Recording is not needed.
 
-macOS handles the normal brightness range. Keep holding Up to enter boost at maximum, or Down to enter extra dimming at the lowest lit step. No release or second press is needed. Extra dimming leaves hardware brightness at that lit setting. If hardware brightness is already zero, Up lets macOS light the display again before using extra dimming.
+Headroom handles supported keys throughout the normal hardware range and both extra ranges. Keep holding Up to enter boost at maximum, or Down to lower the hardware setting to 1% and then enter extra software dimming. No release or second press is needed. Extra dimming leaves the hardware at that setting. This percentage describes the hardware slider, not measured luminance. If hardware brightness is already zero, Up raises it; Down leaves it off.
 
-Holding Down reduces boost; holding Up reduces extra dimming. At the unchanged baseline, Headroom restores the original tables before the held key continues through macOS's normal range. Holding Option + Shift gives smaller steps.
+Holding Down reduces boost; holding Up reduces extra dimming. At the unchanged baseline, Headroom restores the original tables before the held key continues through the normal hardware range. Holding Option + Shift gives smaller steps.
 
-The **Display +** overlay has a bar, tick marks, and sun icons, with no percentage or multiplier label. Its bar is a control position, not a brightness measurement. The candidate's menu slider can dim the saved tables to a factor of 0.1 without starting the HDR carrier; this does not mean 10% of physical brightness. Switching the display off restores its original tables from either extra range.
+One **Display +** overlay covers supported adjustments across all three ranges. It has a bar, tick marks, and sun icons, with no percentage or multiplier label. Its bar is a control position, not a brightness measurement. The candidate's menu slider can dim the saved tables to a factor of 0.1 without starting the HDR carrier; this does not mean 10% of physical brightness. Switching the display off restores its original tables from either extra range.
 
 Keys target the built-in display, otherwise the primary display. Use the per-display menu for another screen. If Lunar is running, Headroom pauses keyboard control to avoid both apps handling the same key. Quit Lunar yourself if you want Headroom to handle the keys; Headroom does not close it automatically.
 
-If keys do not enter either extra range, check Accessibility permission and the menu's availability message. An unavailable native-brightness read also leaves keys with macOS. Use the display switch to turn off active boost or extra dimming. Quitting Headroom restores active displays and leaves all keyboard handling to macOS. Sleep and quit discard pending key actions, and existing display restoration safeguards still apply. Build-specific checks and remaining physical-key tests are recorded in [validation](../VALIDATION.md).
+If keys do not enter either extra range, check Accessibility permission and the menu's availability message. An unavailable native-brightness adapter, failed write, or failed read leaves ordinary keys with macOS. Use the display switch to turn off active boost or extra dimming. Quitting Headroom restores the original color tables, preserves your selected hardware brightness, and leaves all keyboard handling to macOS. Sleep and quit discard pending key actions, and existing display restoration safeguards still apply. Build-specific checks and remaining physical-key tests are recorded in [validation](../VALIDATION.md).
 
 ## Local data and removal
 

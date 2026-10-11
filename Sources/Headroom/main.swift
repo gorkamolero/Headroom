@@ -80,6 +80,15 @@ final class DisplayRow:NSView {
 }
 
 final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
+    private struct DisplayConfiguration: Equatable {
+        let identity: DisplayIdentity
+        let frame: NSRect
+        let scale: CGFloat
+        let mirroredDisplay: UInt32
+        let inMirrorSet: Bool
+        let isMain: Bool
+    }
+    private var displayConfigurations = [String: DisplayConfiguration]()
     var status:NSStatusItem!
     let menu = NSMenu()
     var sessions = [String:BoostSession]()
@@ -112,6 +121,11 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         status.menu = menu
         recoverDisconnectedJournals()
         rebuild()
+        // Seed before key monitoring: the first brightness/headroom notification
+        // must not look like a newly connected display and cancel a held key.
+        let initialDisplays = captureDisplays()
+        displayConfigurations = configurations(for: initialDisplays)
+        connectedUUIDs = Set(displayConfigurations.keys)
         brightnessKeys.changed = { [weak self] in self?.updateKeyMenu() }
         brightnessKeys.startMonitoring()
         let center = NotificationCenter.default
@@ -157,14 +171,41 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         }
         recoveryNotice.stringValue = pending>0 ? "An earlier display session needs recovery. Reconnect its display and reopen Headroom." : ""
     }
+    private func captureDisplays() -> [(screen: NSScreen, identity: DisplayIdentity)] {
+        NSScreen.screens.compactMap { screen in
+            guard let identity = try? DisplayIdentity.capture(display: screenID(screen)) else { return nil }
+            return (screen, identity)
+        }
+    }
+    private func configurations(for displays: [(screen: NSScreen, identity: DisplayIdentity)]) -> [String: DisplayConfiguration] {
+        let mainID = CGMainDisplayID()
+        return displays.reduce(into: [:]) { values, display in
+            let id = display.identity.displayID
+            values[display.identity.uuid] = DisplayConfiguration(identity: display.identity,
+                frame: display.screen.frame, scale: display.screen.backingScaleFactor,
+                mirroredDisplay: CGDisplayMirrorsDisplay(id), inMirrorSet: CGDisplayIsInMirrorSet(id) != 0,
+                isMain: id == mainID)
+        }
+    }
     func reconcile(){
-        brightnessKeys.cancelPending()
-        let connected = Set(NSScreen.screens.compactMap{try? DisplayIdentity.capture(display:screenID($0)).uuid})
+        let displays = captureDisplays()
+        let incomingConfigurations = configurations(for: displays)
+        let connected = Set(incomingConfigurations.keys)
+        // macOS also reports screen-parameter changes for brightness/EDR updates.
+        // Only a real display configuration change invalidates queued actions.
+        if incomingConfigurations != displayConfigurations {
+            brightnessKeys.cancelPending()
+            for (uuid, session) in sessions where session.busy {
+                if displayConfigurations[uuid] != incomingConfigurations[uuid] {
+                    session.stop(reason: connected.contains(uuid) ? "Paused after display settings changed" : "Display disconnected")
+                }
+            }
+        }
+        displayConfigurations = incomingConfigurations
         for (uuid,session) in sessions where !connected.contains(uuid) {
             if session.busy {session.stop(reason:"Display disconnected")}
         }
-        for screen in NSScreen.screens {
-            guard let identity = try? DisplayIdentity.capture(display:screenID(screen)) else{continue}
+        for (screen, identity) in displays {
             if let existing = sessions[identity.uuid] {existing.updateScreen(screen, reconnected: !connectedUUIDs.contains(identity.uuid))}
             else {
                 let session = BoostSession(screen:screen,identity:identity,directory:recoveryRoot.appendingPathComponent(identity.uuid,isDirectory:true))
@@ -283,7 +324,7 @@ if CommandLine.arguments.contains("--diagnose-brightness-keys") {
             for index in 0..<Int(min(returned,tapCount)) {
                 let tap = taps[index]
                 if runningPIDs.contains(tap.tappingProcess), tap.enabled,
-                   tap.options == .defaultTap, tap.eventsOfInterest == (1 << 14) { activeTap = true }
+                   tap.options == .defaultTap, tap.eventsOfInterest == BrightnessKeyTap.eventMask { activeTap = true }
             }
         }
     }

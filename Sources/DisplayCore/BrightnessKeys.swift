@@ -46,6 +46,28 @@ public struct BrightnessKeyEvent: Equatable, Sendable {
         default: return nil
         }
 
+        return decoded(direction: direction, phase: phase,
+                       isRepeat: fields & 1 != 0, modifierBits: modifierBits)
+    }
+
+    /// Some keyboards deliver brightness as ordinary keyDown/keyUp events.
+    /// The narrow 144/145 mapping is documented in Lunar's pinned dependency:
+    /// https://github.com/alin23/MediaKeyTap/blob/5b8ee686bc90d917cba4f029b47c2a8541a4f58d/MediaKeyTap/MediaKeyTap.swift#L122-L129
+    /// F14/F15 and every other key retain their existing meaning.
+    public static func parseKeyboard(keyCode: Int64, phase: BrightnessKeyPhase,
+                                     isRepeat: Bool, modifierBits: UInt64) -> Self? {
+        let direction: BrightnessDirection
+        switch keyCode {
+        case 144: direction = .up
+        case 145: direction = .down
+        default: return nil
+        }
+        return decoded(direction: direction, phase: phase,
+                       isRepeat: isRepeat, modifierBits: modifierBits)
+    }
+
+    private static func decoded(direction: BrightnessDirection, phase: BrightnessKeyPhase,
+                                isRepeat: Bool, modifierBits: UInt64) -> Self {
         let shift: UInt64 = 1 << 17
         let control: UInt64 = 1 << 18
         let option: UInt64 = 1 << 19
@@ -55,7 +77,7 @@ public struct BrightnessKeyEvent: Equatable, Sendable {
         return Self(
             direction: direction,
             phase: phase,
-            isRepeat: fields & 1 != 0,
+            isRepeat: isRepeat,
             fine: fine,
             hasUnsupportedModifiers: modifiers != 0 && !fine
         )
@@ -68,32 +90,31 @@ public enum BrightnessBoostState: Equatable, Sendable {
 
 public enum BrightnessAdjustmentMode: Equatable, Sendable {
     case boost, dim
-
-    var nativeHandoffDirection: BrightnessDirection { self == .dim ? .up : .down }
 }
 
 public enum BrightnessKeyAction: Equatable, Sendable {
     case passthrough
     case consume
+    case setNative(Double)
     case start(Double)
     case set(Double)
     case stop
 }
 
 public enum BrightnessKeyPolicy {
-    /// Keep the backlight at a lit keyboard step. Hardware zero is off on a
-    /// MacBook and cannot be usefully darkened with transfer-table scaling.
-    public static let dimmingHardwareCeiling = 1.0 / 16 + 0.001
+    /// Keep the native backlight lit before applying software dimming.
+    public static let hardwareFloor = 0.01
+    private static let endpointTolerance = 0.0001
 
-    /// Shared by the cached key decision and the fresh read immediately before
-    /// starting a session, so a stale endpoint cannot start the wrong range.
     public static func canStart(mode: BrightnessAdjustmentMode, normalBrightness: Double?,
                                 available: Bool, ceiling: Double) -> Bool {
         guard available, let normalBrightness, normalBrightness.isFinite,
-              normalBrightness >= 0, normalBrightness <= 1.0001 else { return false }
+              normalBrightness >= 0, normalBrightness <= 1 + endpointTolerance else { return false }
         switch mode {
-        case .boost: return normalBrightness >= 0.999 && ceiling.isFinite && ceiling > 1.01
-        case .dim: return normalBrightness > 0 && normalBrightness <= dimmingHardwareCeiling
+        case .boost:
+            return normalBrightness >= 1 - endpointTolerance && ceiling.isFinite && ceiling > 1.01
+        case .dim:
+            return normalBrightness > 0 && normalBrightness <= hardwareFloor + endpointTolerance
         }
     }
 
@@ -105,22 +126,39 @@ public enum BrightnessKeyPolicy {
         normalBrightness: Double?,
         available: Bool,
         dimmingAvailable: Bool = false,
-        mode: BrightnessAdjustmentMode? = nil
+        mode: BrightnessAdjustmentMode? = nil,
+        nativeAvailable: Bool = true
     ) -> BrightnessKeyAction {
         guard event.phase == .down, !event.hasUnsupportedModifiers else { return .passthrough }
+        // Loss of native control must never send hardware changes through while
+        // the guardian is still restoring the saved gamma tables.
+        if state == .stopping { return .consume }
+        guard nativeAvailable else { return .passthrough }
         let step = event.fine ? 1.0 / 64 : 1.0 / 16
-
         switch state {
-        case .off:
-            // Continue a held brightness key through a confirmed hardware
-            // endpoint into the extra range without requiring another press.
-            let requestedMode: BrightnessAdjustmentMode = event.direction == .up ? .boost : .dim
-            guard canStart(mode: requestedMode, normalBrightness: normalBrightness,
-                           available: requestedMode == .dim ? dimmingAvailable : available,
-                           ceiling: ceiling) else { return .passthrough }
-            return requestedMode == .dim
-                ? .start(max(DisplayAdjustmentRange.minimumFactor, 1 - step))
-                : .start(min(1 + step, ceiling))
+        case .off, .unavailable:
+            guard let normalBrightness, normalBrightness.isFinite,
+                  normalBrightness >= 0, normalBrightness <= 1 + endpointTolerance else { return .passthrough }
+            let normal = min(1, normalBrightness)
+            switch event.direction {
+            case .up:
+                if normal < 1 - endpointTolerance { return .setNative(min(1, normal + step)) }
+                if state == .off, canStart(mode: .boost, normalBrightness: normal,
+                                          available: available, ceiling: ceiling) {
+                    return .start(min(1 + step, ceiling))
+                }
+                return .consume
+            case .down:
+                if normal > hardwareFloor + endpointTolerance {
+                    return .setNative(max(hardwareFloor, normal - step))
+                }
+                if state == .off, canStart(mode: .dim, normalBrightness: normal,
+                                          available: dimmingAvailable, ceiling: ceiling) {
+                    return .start(max(DisplayAdjustmentRange.minimumFactor, 1 - step))
+                }
+                // Hardware zero is already off. Never increase it on Down.
+                return .consume
+            }
         case .preparing, .on:
             guard factor.isFinite else { return .stop }
             let activeMode = mode ?? (factor < 1 ? .dim : .boost)
@@ -140,33 +178,28 @@ public enum BrightnessKeyPolicy {
                 return next == factor ? .consume : .set(next)
             }
         case .stopping:
-            // Wait for restoration instead of changing hardware brightness while
-            // the guardian is still restoring the saved transfer tables.
+            // Hardware changes wait until the guardian restores the original
+            // gamma tables. The next repeat then resumes native movement.
             return .consume
-        case .unavailable:
-            return .passthrough
         }
     }
 }
 
-/// Routes continuous held-key movement across native, dimming, and boost
-/// ranges. macOS must receive the release whenever it received an earlier Down,
-/// even when Headroom subsequently captured repeats at a hardware endpoint.
+/// Headroom owns supported brightness-key sequences throughout the native and
+/// software ranges. A release still reaches macOS if an earlier fallback event
+/// in that same sequence was passed through.
 public struct BrightnessKeySequence: Sendable {
     private var consumedDirections: Set<BrightnessDirection> = []
     private var nativeDirections: Set<BrightnessDirection> = []
-    private var nativeHandoffDirections: Set<BrightnessDirection> = []
-    private var deferredDirections: Set<BrightnessDirection> = []
     private var releasedDirections: Set<BrightnessDirection> = []
 
     public init() {}
 
     public mutating func reset() {
-        consumedDirections.removeAll()
-        nativeDirections.removeAll()
-        nativeHandoffDirections.removeAll()
-        deferredDirections.removeAll()
-        releasedDirections.removeAll()
+        // Cancellation must not restart a held adjustment on its next repeat.
+        releasedDirections.formUnion(consumedDirections)
+        releasedDirections.formUnion(nativeDirections)
+        // Keep both kinds of release obligations until key-up or a fresh press.
     }
 
     public mutating func route(
@@ -178,72 +211,38 @@ public struct BrightnessKeySequence: Sendable {
         available: Bool,
         dimmingAvailable: Bool = false,
         mode: BrightnessAdjustmentMode? = nil,
-        nativeDownReadPending: Bool = false
+        nativeAvailable: Bool = true
     ) -> BrightnessKeyAction {
         if event.phase == .up {
             let releaseIsOurs = consumedDirections.contains(event.direction)
                 && !nativeDirections.contains(event.direction)
             consumedDirections.remove(event.direction)
             nativeDirections.remove(event.direction)
-            nativeHandoffDirections.remove(event.direction)
-            deferredDirections.remove(event.direction)
             releasedDirections.insert(event.direction)
             return releaseIsOurs ? .consume : .passthrough
         }
         if !event.isRepeat {
             consumedDirections.remove(event.direction)
             nativeDirections.remove(event.direction)
-            nativeHandoffDirections.remove(event.direction)
-            deferredDirections.remove(event.direction)
             releasedDirections.remove(event.direction)
         } else if releasedDirections.contains(event.direction) {
-            // A queued repeat after release must not restart an adjustment.
-            return .passthrough
+            return .consume
         }
         let owned = consumedDirections.contains(event.direction)
         if event.isRepeat, !owned {
-            // Monitoring can begin in the middle of a native key sequence.
+            // If monitoring starts mid-hold, assume the original press reached
+            // macOS so its eventual release cannot leave a native key held.
             nativeDirections.insert(event.direction)
         }
-        if event.direction == .down, nativeDownReadPending, !event.hasUnsupportedModifiers {
-            if !event.isRepeat {
-                consumedDirections.insert(.down)
-                deferredDirections.insert(.down)
-            }
-            return .consume
-        }
-        if owned, state == .off, event.isRepeat, !deferredDirections.contains(event.direction) {
-            // Resume native movement only after the corresponding restoration.
-            // An unexpected stop must not silently restart the same session.
-            if !event.hasUnsupportedModifiers, nativeHandoffDirections.contains(event.direction) {
-                consumedDirections.remove(event.direction)
-                nativeHandoffDirections.remove(event.direction)
-                nativeDirections.insert(event.direction)
-                return .passthrough
-            }
-            return .consume
-        }
-
-        let activeMode = mode ?? (factor < 1 ? .dim : .boost)
         let action = BrightnessKeyPolicy.action(
             event: event, state: state, factor: factor, ceiling: ceiling,
             normalBrightness: normalBrightness, available: available,
-            dimmingAvailable: dimmingAvailable, mode: activeMode
+            dimmingAvailable: dimmingAvailable, mode: mode, nativeAvailable: nativeAvailable
         )
         if action == .passthrough {
-            if owned, !deferredDirections.contains(event.direction) { return .consume }
-            consumedDirections.remove(event.direction)
-            deferredDirections.remove(event.direction)
+            if owned, event.hasUnsupportedModifiers { return .consume }
             nativeDirections.insert(event.direction)
             return .passthrough
-        }
-        deferredDirections.remove(event.direction)
-        if state == .on || state == .preparing {
-            if event.direction == activeMode.nativeHandoffDirection {
-                nativeHandoffDirections.insert(event.direction)
-            } else {
-                nativeHandoffDirections.remove(event.direction)
-            }
         }
         consumedDirections.insert(event.direction)
         return action

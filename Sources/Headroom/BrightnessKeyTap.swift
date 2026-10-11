@@ -2,9 +2,11 @@ import AppKit
 import ApplicationServices
 import DisplayCore
 
-/// An active filter for display-brightness buttons only. Ownership and
-/// all callbacks stay on the main run loop; ordinary keyboard events are never
-/// included in this tap's event mask. Permission is requested by the UI, not here.
+/// An active filter for display-brightness buttons only. Keyboard events are
+/// checked only for the two brightness keycodes; every other key passes through
+/// immediately without reading its text. No ordinary key data is retained.
+/// Ownership and callbacks stay on the main run loop. Permission is requested
+/// by the UI, not here.
 final class BrightnessKeyTap {
     var handler: ((BrightnessKeyEvent) -> Bool)?
     var interrupted: (() -> Void)?
@@ -13,6 +15,9 @@ final class BrightnessKeyTap {
     private var source: CFRunLoopSource?
     private var generation = UUID()
     private static let systemDefinedType: UInt32 = 14
+    static let eventMask = (CGEventMask(1) << CGEventType.keyDown.rawValue)
+        | (CGEventMask(1) << CGEventType.keyUp.rawValue)
+        | (CGEventMask(1) << systemDefinedType)
 
     @discardableResult
     func start() -> Bool {
@@ -23,12 +28,11 @@ final class BrightnessKeyTap {
         if let tap, CGEvent.tapIsEnabled(tap: tap) { return true }
         stop()
 
-        let mask = CGEventMask(1) << Self.systemDefinedType
         guard let newTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
-            eventsOfInterest: mask,
+            eventsOfInterest: Self.eventMask,
             callback: { _, type, event, context in
                 guard let context else { return Unmanaged.passUnretained(event) }
                 return Unmanaged<BrightnessKeyTap>.fromOpaque(context)
@@ -80,6 +84,19 @@ final class BrightnessKeyTap {
                 }
             }
             return unchanged
+        }
+        if type == .keyDown || type == .keyUp {
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            // Reject ordinary keys before creating NSEvent or reading anything
+            // except the virtual keycode. This never reads typed characters.
+            guard keyCode == 144 || keyCode == 145,
+                  let key = BrightnessKeyEvent.parseKeyboard(
+                    keyCode: keyCode,
+                    phase: type == .keyDown ? .down : .up,
+                    isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
+                    modifierBits: event.flags.rawValue
+                  ) else { return unchanged }
+            return handler?(key) == true ? nil : unchanged
         }
         guard type.rawValue == Self.systemDefinedType,
               let native = NSEvent(cgEvent: event),

@@ -1,12 +1,14 @@
-# Headroom 0.5.0 — local candidate, build 11
+# Headroom 0.5.0 — local candidate, build 12
 
-- Automatic brightness-key handling while Headroom runs. Accessibility permission is requested once on first use; later launches report missing access in the menu without repeating the prompt. Hold Up through normal maximum into boost, or Down through the lowest lit step into extra dimming. No release or second press is needed at either boundary.
-- Extra dimming leaves hardware brightness at the lowest lit step. If hardware brightness is already zero, Up remains with macOS to light it again.
-- Holding Down reduces boost; holding Up reduces extra dimming. Reaching the unchanged baseline restores the saved tables before the held key continues through macOS's normal range. Hold Option–Shift for fine adjustments.
+- Automatic brightness-key handling while Headroom runs. Accessibility permission is requested once on first use; later launches report missing access in the menu without repeating the prompt. Headroom owns supported keys across normal hardware brightness, boost, and extra dimming. No release or second press is needed at either boundary.
+- Holding Down lowers hardware brightness to a 1% slider setting, then enters extra software dimming without lowering the backlight further. If hardware brightness is already zero, Up raises it and Down leaves it off. The hardware percentage is not a physical luminance measurement.
+- Holding Down reduces boost; holding Up reduces extra dimming. Reaching the unchanged baseline restores the saved tables before the held key resumes normal hardware changes. Hold Option–Shift for fine adjustments.
 - Per-display sliders cover table factors from 0.1 to the available boost ceiling, at most 2.0. Extra dimming uses the saved original tables without an HDR carrier; these factors are not measured luminance ratios.
-- A native-style **Display +** overlay built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older systems. White bar, tick marks, and sun icons; automatic fade and no percentage or multiplier label.
+- One native-style **Display +** overlay across all supported ranges, built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older systems. White bar, tick marks, and sun icons; automatic fade and no percentage or multiplier label.
 - Accessibility is requested only for key control. Keys target the built-in display, or the primary display on a desktop Mac, and pause while Lunar is running.
-- One isolated private adapter reads normal brightness. It does not change automatic brightness or use a private brightness setter. The overlay uses public controls because the tested system-banner interfaces are unavailable to Headroom.
+- Handles both system-defined brightness events and alternate brightness keycodes 144/145, including held keys and releases. Ordinary keys pass through unchanged.
+- One isolated private adapter reads and sets native brightness with DisplayServices, validates levels, and checks write/readback results. It does not change automatic brightness. If native control is unavailable, ordinary keys fall back to macOS. The overlay uses public controls because the tested system-banner interfaces are unavailable to Headroom.
+- Disable and quit restore the original color tables. Hardware brightness selected with the keys remains at its last setting.
 
 Build-specific test, installation, and visual results are recorded in [VALIDATION.md](../VALIDATION.md). Physical-key repetition and the restoration handoff remain separate live checks. This candidate has not replaced the public 0.4.0 download.
 

@@ -9,10 +9,9 @@ final class BrightnessHUD {
     private var dismissal: Timer?
     private var presentation = 0
 
-    func show(screen: NSScreen, factor: Double, maximum: Double,
-              preparing: Bool = false, message: String? = nil) {
-        guard factor.isFinite, maximum.isFinite else { return }
-        present(screen: screen, level: factor / max(1, maximum), duration: 1.5)
+    func show(screen: NSScreen, level: Double) {
+        guard level.isFinite else { return }
+        present(screen: screen, level: level, duration: 1.5)
     }
 
     /// Displays the production view without changing brightness or starting a session.

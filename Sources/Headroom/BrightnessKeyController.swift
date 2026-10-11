@@ -2,56 +2,68 @@ import AppKit
 import ApplicationServices
 import DisplayCore
 
-/// Owns the ranges beyond both hardware endpoints. Within the normal range
-/// macOS receives the original media-key events and controls the backlight.
+/// One owner for the complete brightness gesture. Supported key events never
+/// reach macOS's native brightness handler, so only Headroom presents an OSD.
 final class BrightnessKeyController {
     private struct Snapshot {
         let session: BoostSession
         var state: BrightnessBoostState
         var factor: Double
         let ceiling: Double
-        let normal: Double?
+        var normal: Double?
         let available: Bool
         let dimmingAvailable: Bool
+        let nativeAvailable: Bool
         var mode: BrightnessAdjustmentMode
         let time: TimeInterval
     }
-
+    private struct NativeWrite {
+        let session: BoostSession
+        let value: Double
+        let deadline: TimeInterval
+    }
     private struct KeyOwnership {
         let normal: Double
         let mode: BrightnessAdjustmentMode
-
-        func mustRestore(after current: Double?) -> Bool {
-            guard let current, current.isFinite, current >= 0, current <= 1.0001 else { return true }
-            return mode == .dim ? current > normal + 0.002 : current < normal - 0.002
-        }
     }
 
     private let sessions: () -> [BoostSession]
+    private let reader: any NormalBrightnessControlling
+    private let accessibility: () -> Bool
+    private let installEventTap: Bool
     private let tap = BrightnessKeyTap()
-    private let reader = NormalBrightnessReader()
     private let hud = BrightnessHUD()
     private var timer: Timer?
-    private var nativeDownRead: (uuid: String, before: Double, after: TimeInterval, expires: TimeInterval)?
-    private var nativeDownReadTimer: Timer?
+    private var drainTimer: Timer?
+    private var awaitingNative: NativeWrite?
     private var snapshot: Snapshot?
     private var sequence = BrightnessKeySequence()
     private var pending: [(BoostSession, BrightnessKeyAction)] = []
     private var generation = 0
     private var flushing = false
+    private var monitoring = false
     private var tapRunning = false
     private var suspended = false
     private var keyOwned: [String: KeyOwnership] = [:]
+    private var nativeFailures: [String: String] = [:]
     private var lastPermissionCheck = -Double.infinity
     private var trusted = false
     private var conflict = false
     private var nextTapAttempt = 0.0
     var changed: (() -> Void)?
     private(set) var message = ""
-    var isEnabled: Bool { true }
-    var permissionRequired: Bool { isEnabled && !trusted }
+    var permissionRequired: Bool { !trusted }
+    var isIdle: Bool { pending.isEmpty && awaitingNative == nil && !flushing }
 
-    init(sessions: @escaping () -> [BoostSession]) {
+    // Dependency injection lets integration tests run this exact controller and
+    // real display driver without posting synthetic events to other apps.
+    init(reader: any NormalBrightnessControlling = NormalBrightnessReader(),
+         accessibility: @escaping () -> Bool = { AXIsProcessTrusted() },
+         installEventTap: Bool = true,
+         sessions: @escaping () -> [BoostSession]) {
+        self.reader = reader
+        self.accessibility = accessibility
+        self.installEventTap = installEventTap
         self.sessions = sessions
         tap.handler = { [weak self] event in self?.handle(event) ?? false }
         tap.interrupted = { [weak self] in
@@ -63,11 +75,11 @@ final class BrightnessKeyController {
         }
     }
 
-    func startMonitoring() {
+    func startMonitoring(requestPermission: Bool = true) {
         guard timer == nil else { return }
-        // Prompt once on first use. A rebuilt ad-hoc app can lose its old
-        // approval; report that in the menu without nagging on every launch.
-        if !UserDefaults.standard.bool(forKey: "accessibilityPromptShown") {
+        monitoring = true
+        suspended = false
+        if requestPermission, !UserDefaults.standard.bool(forKey: "accessibilityPromptShown") {
             requestPermissionIfNeeded()
         }
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.refresh() }
@@ -78,10 +90,10 @@ final class BrightnessKeyController {
 
     func requestPermissionIfNeeded() {
         UserDefaults.standard.set(true, forKey: "accessibilityPromptShown")
-        trusted = AXIsProcessTrusted()
+        trusted = accessibility()
         if !trusted {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            trusted = AXIsProcessTrustedWithOptions(options)
+            _ = AXIsProcessTrustedWithOptions(options)
         }
         lastPermissionCheck = -Double.infinity
     }
@@ -97,7 +109,6 @@ final class BrightnessKeyController {
         suspended = true
         cancelPending()
         tap.stop(); tapRunning = false
-        snapshot = nil
     }
 
     func resume() {
@@ -107,18 +118,18 @@ final class BrightnessKeyController {
     }
 
     func shutdown() {
+        monitoring = false
         suspended = true
         timer?.invalidate(); timer = nil
         tap.stop(); tapRunning = false
         cancelPending()
-        snapshot = nil
     }
 
     func cancelPending() {
         generation += 1
         pending.removeAll()
-        nativeDownRead = nil
-        nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
+        awaitingNative = nil
+        drainTimer?.invalidate(); drainTimer = nil
         sequence.reset()
         snapshot = nil
         hud.hide()
@@ -132,8 +143,6 @@ final class BrightnessKeyController {
 
     private func target() -> BoostSession? {
         let online = sessions().filter { CGDisplayIsOnline(screenID($0.screen)) != 0 }
-        // Media keys have no display identifier. Preserve macOS's usual built-in
-        // target; on desktop Macs use the primary display only.
         return online.first { CGDisplayIsBuiltin(screenID($0.screen)) != 0 }
             ?? online.first { screenID($0.screen) == CGMainDisplayID() }
     }
@@ -147,15 +156,15 @@ final class BrightnessKeyController {
     }
 
     func refresh() {
-        guard isEnabled, !suspended else { return }
+        guard monitoring, !suspended else { return }
         let now = ProcessInfo.processInfo.systemUptime
         if now - lastPermissionCheck >= 1 {
             lastPermissionCheck = now
-            trusted = AXIsProcessTrusted()
+            trusted = accessibility()
             conflict = !NSRunningApplication.runningApplications(withBundleIdentifier: "fyi.lunar.Lunar").isEmpty
         }
         guard trusted, !conflict else {
-            if tapRunning || !pending.isEmpty {
+            if tapRunning || !isIdle {
                 tap.stop(); tapRunning = false; cancelPending()
             }
             restoreKeySessions(reason: "Brightness keys paused")
@@ -164,45 +173,28 @@ final class BrightnessKeyController {
             return
         }
         if !tapRunning && now >= nextTapAttempt {
-            tapRunning = tap.start()
+            tapRunning = !installEventTap || tap.start()
             nextTapAttempt = now + 2
         }
         guard tapRunning else { setMessage("Brightness keys unavailable — retrying…"); return }
-        // Preserve the projected state of queued key events until their actions
-        // have drained outside the event tap callback.
-        guard pending.isEmpty, !flushing else { return }
+        // Queued actions have already projected the desired state. Do not
+        // replace it with a display read from the middle of a hardware write.
+        guard isIdle else { return }
         guard let session = target() else { snapshot = nil; setMessage("No display for brightness keys"); return }
         let normal = reader.brightness(displayID: screenID(session.screen))
-        if let awaiting = nativeDownRead {
-            if awaiting.uuid != session.uuid || now >= awaiting.expires {
-                // A missing/unchanged getter must not leave Down blocked if
-                // macOS ignored the original key event.
-                nativeDownRead = nil
-            } else if now < awaiting.after || normal == nil || abs(normal! - awaiting.before) < 0.000_001 {
-                // Do not forward another Down using the value from before the
-                // previous native event. Up still passes through immediately.
-                snapshot = nil
-                return
-            } else {
-                nativeDownRead = nil
-            }
-            if nativeDownRead == nil {
-                nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
-            }
-        }
         let mode: BrightnessAdjustmentMode = session.isDimming ? .dim : .boost
         if let ownership = keyOwned[session.uuid], session.enabled {
             if ownership.mode != mode {
-                // A menu adjustment started a different mode; it no longer
-                // belongs to the old keyboard session.
                 keyOwned.removeValue(forKey: session.uuid)
-            } else if ownership.mustRestore(after: normal) {
+            } else if normal == nil || abs(normal! - ownership.normal) > 0.005 {
                 keyOwned.removeValue(forKey: session.uuid)
-                hud.hide()
+                cancelPending()
                 session.stop(reason: "Paused after system brightness changed")
             }
         }
         if !session.busy { keyOwned.removeValue(forKey: session.uuid) }
+        let nativeAvailable = reader.canSetBrightness && normal != nil
+            && nativeFailures[session.uuid] == nil && CGDisplayIsInMirrorSet(screenID(session.screen)) == 0
         let state: BrightnessBoostState
         switch session.state {
         case .off: state = .off
@@ -212,145 +204,189 @@ final class BrightnessKeyController {
         case .unavailable: state = .unavailable
         }
         if let previous = snapshot, previous.state == .on || previous.state == .preparing,
-           !session.enabled {
-            hud.hide()
-        }
-        let ceiling = session.state == .on && mode == .boost
+           !session.enabled, state != .stopping { hud.hide() }
+        let ceiling = state == .on && mode == .boost
             ? min(session.maximumFactor, Double(session.screen.maximumExtendedDynamicRangeColorComponentValue))
             : session.maximumFactor
-        snapshot = Snapshot(session: session, state: state, factor: session.desiredFactor,
+        snapshot = Snapshot(session: session, state: state, factor: session.enabled ? session.desiredFactor : 1,
                             ceiling: ceiling, normal: normal, available: session.supportsBoost,
-                            dimmingAvailable: session.supportsDimming, mode: mode, time: now)
-        setMessage(normal == nil ? "Normal brightness unavailable on this display" : "")
+                            dimmingAvailable: session.supportsDimming, nativeAvailable: nativeAvailable,
+                            mode: mode, time: now)
+        setMessage(nativeFailures[session.uuid] ?? (nativeAvailable ? "" : "Brightness keys unavailable on this display"))
     }
 
-    private func handle(_ event: BrightnessKeyEvent) -> Bool {
+    // Internal for the production-controller integration harness. This does not
+    // generate system events or install an event tap without macOS permission.
+    func handle(_ event: BrightnessKeyEvent) -> Bool {
         if event.phase == .up {
             return sequence.route(event: event, state: .off, factor: 1, ceiling: 1,
-                                  normalBrightness: nil, available: false) != .passthrough
+                                  normalBrightness: nil, available: false, nativeAvailable: false) != .passthrough
         }
-        if !suspended, trusted, !conflict,
-           event.direction == .down && nativeDownRead != nil {
-            return sequence.route(event: event, state: .off, factor: 1, ceiling: 1,
-                normalBrightness: nil, available: false,
-                nativeDownReadPending: nativeDownRead != nil) != .passthrough
+        guard monitoring, !suspended, trusted, !conflict, var current = snapshot,
+              !isIdle || ProcessInfo.processInfo.systemUptime - current.time < 0.75 else {
+            RunLoop.main.perform(inModes: [.common]) { [weak self] in self?.refresh() }
+            // Cancellation deliberately clears the cached state. Consult the
+            // real session before allowing native changes during restoration.
+            let fallback: BrightnessBoostState = target()?.busy == true ? .stopping : .unavailable
+            return sequence.route(event: event, state: fallback, factor: 1, ceiling: 1,
+                                  normalBrightness: nil, available: false, nativeAvailable: false) != .passthrough
         }
-        if event.direction == .up, nativeDownRead != nil {
-            nativeDownRead = nil
-            nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
-        }
-        guard isEnabled, !suspended, trusted, !conflict,
-              var current = snapshot,
-              ProcessInfo.processInfo.systemUptime - current.time < 0.75 else {
-            sequence.reset()
-            RunLoop.main.perform(inModes: [.common]) { [weak self] in self?.hud.hide() }
-            return false
+        if !current.nativeAvailable, current.session.busy, !event.hasUnsupportedModifiers {
+            // Native fallback must not run on top of a menu-owned gamma
+            // session. Restore on key input, preserving independent menu use
+            // on displays that never supported the native brightness adapter.
+            current.state = .stopping
+            snapshot = current
+            let epoch = generation
+            RunLoop.main.perform(inModes: [.common]) { [weak self, weak session = current.session] in
+                guard let self, let session, self.generation == epoch else { return }
+                if session.enabled { session.stop(reason: "Paused before native brightness control") }
+                self.refresh()
+            }
         }
         let action = sequence.route(event: event, state: current.state,
-            factor: current.factor, ceiling: current.ceiling,
-            normalBrightness: current.normal, available: current.available,
-            dimmingAvailable: current.dimmingAvailable, mode: current.mode)
-        if action == .passthrough {
-            // A native key can change the backlight immediately. Never use its
-            // old cached endpoint for a fast subsequent opposite press.
-            snapshot = nil
-            if event.direction == .down, !event.hasUnsupportedModifiers,
-               current.state == .off, current.dimmingAvailable,
-               let normal = current.normal, normal > 0 {
-                let now = ProcessInfo.processInfo.systemUptime
-                nativeDownRead = (current.session.uuid, normal, now + 0.03, now + 0.35)
-                nativeDownReadTimer?.invalidate()
-                let timer = Timer(timeInterval: 0.035, repeats: true) { [weak self] _ in
-                    self?.refresh()
-                }
-                nativeDownReadTimer = timer
-                RunLoop.main.add(timer, forMode: .common)
-            } else if event.direction == .up {
-                nativeDownRead = nil
-                nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
-            }
-            RunLoop.main.perform(inModes:[.common]) { [weak self] in
-                self?.hud.hide()
-                self?.refresh()
-            }
-            return false
-        }
+            factor: current.factor, ceiling: current.ceiling, normalBrightness: current.normal,
+            available: current.available, dimmingAvailable: current.dimmingAvailable,
+            mode: current.mode, nativeAvailable: current.nativeAvailable)
+        if action == .passthrough { return false }
         switch action {
+        case .setNative(let value): current.normal = value; current.factor = 1
         case .start(let factor):
-            current.state = .preparing
-            current.factor = factor
+            current.state = .preparing; current.factor = factor
             current.mode = factor < 1 ? .dim : .boost
         case .set(let factor): current.factor = factor
         case .stop: current.state = .stopping; current.factor = 1
         default: break
         }
         snapshot = current
+        let epoch = generation
         if action == .consume {
-            // A key at the ceiling should still show feedback, even after the
-            // previous overlay faded. Keep UI work outside the tap callback.
-            if current.state == .on || current.state == .preparing {
-                let epoch = generation
-                let session = current.session
-                RunLoop.main.perform(inModes: [.common]) { [weak self, weak session] in
-                    guard let self, let session, epoch == self.generation,
-                          session.enabled else { return }
-                    self.hud.show(screen: session.screen, factor: session.desiredFactor,
-                                  maximum: session.maximumFactor,
-                                  preparing: session.state == .preparing)
-                }
+            RunLoop.main.perform(inModes: [.common]) { [weak self, weak session = current.session] in
+                guard let self, let session, epoch == self.generation else { return }
+                self.showFeedback(session)
             }
             return true
         }
-        // Coalesce repeated set requests without ever reordering start or stop.
-        if case .set = action, let last = pending.last, case .set = last.1,
-           last.0 === current.session { pending[pending.count - 1] = (current.session, action) }
-        else { pending.append((current.session, action)) }
-        if pending.count == 1 {
-            let epoch = generation
-            RunLoop.main.perform(inModes: [.common]) { [weak self] in self?.flush(epoch: epoch) }
+        // Coalesce absolute adjustments only within the same range. A start or
+        // restoration boundary can never be reordered behind a hardware write.
+        if let last = pending.last, last.0 === current.session {
+            switch (last.1, action) {
+            case (.setNative, .setNative), (.set, .set): pending.removeLast()
+            default: break
+            }
         }
+        pending.append((current.session, action))
+        guard pending.count <= 128 else {
+            cancelPending()
+            restoreKeySessions(reason: "Brightness keys paused")
+            return true
+        }
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in self?.drain(epoch: epoch) }
         return true
     }
 
-    private func flush(epoch: Int) {
-        guard epoch == generation, isEnabled, !suspended, trusted, !conflict else { return }
-        let actions = pending
-        pending.removeAll()
+    private func scheduleDrain() {
+        guard drainTimer == nil else { return }
+        let epoch = generation
+        let timer = Timer(timeInterval: 0.02, repeats: true) { [weak self] _ in self?.drain(epoch: epoch) }
+        drainTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func failNative(_ session: BoostSession, _ reason: String) {
+        nativeFailures[session.uuid] = reason
+        cancelPending()
+        restoreKeySessions(reason: reason)
+        setMessage(reason)
+    }
+
+    private func drain(epoch: Int) {
+        guard epoch == generation, monitoring, !suspended, trusted, !conflict, !flushing else { return }
         flushing = true
-        for (session, action) in actions {
-            guard epoch == generation else { break }
+        defer {
+            flushing = false
+            if pending.isEmpty && awaitingNative == nil {
+                drainTimer?.invalidate(); drainTimer = nil
+                refresh()
+            }
+        }
+        if let write = awaitingNative {
+            guard target() === write.session, CGDisplayIsOnline(screenID(write.session.screen)) != 0 else {
+                cancelPending(); return
+            }
+            let actual = reader.brightness(displayID: screenID(write.session.screen))
+            // Range boundaries must satisfy the same tolerance as canStart.
+            // A looser readback could end the wait before dimming/boost can begin.
+            let tolerance = write.value == BrightnessKeyPolicy.hardwareFloor || write.value == 1
+                ? 0.0001 : 0.002
+            if let actual, abs(actual - write.value) <= tolerance {
+                awaitingNative = nil
+            } else if ProcessInfo.processInfo.systemUptime >= write.deadline {
+                failNative(write.session, "Hardware brightness did not confirm the requested level")
+                return
+            } else { scheduleDrain(); return }
+        }
+        while !pending.isEmpty, epoch == generation {
+            let (session, action) = pending.removeFirst()
+            guard target() === session else { cancelPending(); return }
             switch action {
+            case .setNative(let value):
+                guard !session.busy else { cancelPending(); return }
+                guard value.isFinite, value >= BrightnessKeyPolicy.hardwareFloor, value <= 1,
+                      reader.setBrightness(value, displayID: screenID(session.screen)) else {
+                    failNative(session, "Hardware brightness control is unavailable")
+                    return
+                }
+                awaitingNative = NativeWrite(session: session, value: value,
+                    deadline: ProcessInfo.processInfo.systemUptime + 0.8)
+                showFeedback(session)
+                scheduleDrain()
+                return
             case .start(let factor):
                 let mode: BrightnessAdjustmentMode = factor < 1 ? .dim : .boost
                 let normal = reader.brightness(displayID: screenID(session.screen))
-                guard !session.busy, target() === session,
+                guard !session.busy, session.state != .unavailable,
                       BrightnessKeyPolicy.canStart(mode: mode, normalBrightness: normal,
-                          available: mode == .dim ? session.supportsDimming : session.supportsBoost,
-                          ceiling: session.maximumFactor), let normal else { continue }
+                        available: mode == .dim ? session.supportsDimming : session.supportsBoost,
+                        ceiling: session.maximumFactor), let normal else {
+                    cancelPending(); return
+                }
                 keyOwned[session.uuid] = KeyOwnership(normal: normal, mode: mode)
                 session.setLevel(factor)
                 session.start()
             case .set(let factor):
-                guard session.enabled else { continue }
+                guard session.enabled else { cancelPending(); return }
                 if keyOwned[session.uuid] == nil {
                     guard let normal = reader.brightness(displayID: screenID(session.screen)) else {
-                        session.stop(reason: "Paused because system brightness is unavailable")
-                        hud.hide()
-                        continue
+                        session.stop(reason: "System brightness is unavailable")
+                        cancelPending(); return
                     }
                     keyOwned[session.uuid] = KeyOwnership(normal: normal,
                         mode: session.isDimming ? .dim : .boost)
                 }
                 session.setLevel(factor)
-            case .stop:
-                session.stop(reason: "Off")
-            default: continue
+            case .stop: session.stop(reason: "Off")
+            default: break
             }
-            hud.show(screen: session.screen, factor: session.state == .stopping || !session.enabled ? 1 : session.desiredFactor,
-                     maximum: session.maximumFactor, preparing: session.state == .preparing,
-                     message: session.state == .unavailable ? session.message : nil)
+            showFeedback(session)
         }
-        flushing = false
-        refresh()
+    }
+
+    private func showFeedback(_ session: BoostSession) {
+        guard let current = snapshot, current.session === session, current.nativeAvailable else { return }
+        let normal = current.normal ?? 0
+        let factor = current.state == .on || current.state == .preparing ? current.factor : 1
+        let nativeTop = current.available && current.ceiling > 1.01 ? 0.85 : 1.0
+        let level: Double
+        if factor < 1 {
+            level = 0.15 * (factor - session.minimumFactor) / (1 - session.minimumFactor)
+        } else if factor > 1 {
+            level = nativeTop + (1 - nativeTop) * (factor - 1) / max(0.01, current.ceiling - 1)
+        } else if normal <= 0 { level = 0 }
+        else {
+            level = 0.15 + (nativeTop - 0.15) * (normal - BrightnessKeyPolicy.hardwareFloor)
+                / (1 - BrightnessKeyPolicy.hardwareFloor)
+        }
+        hud.show(screen: session.screen, level: min(1, max(0, level)))
     }
 }
