@@ -4,6 +4,7 @@ Reviewed on 10 October 2026. Headroom is independently implemented with Apple fr
 
 ## Display behavior
 
+- [AVPlayerLayer.isReadyForDisplay](https://developer.apple.com/documentation/avfoundation/avplayerlayer/isreadyfordisplay) indicates first-frame readiness; [current EDR headroom](https://developer.apple.com/documentation/appkit/nsscreen/maximumextendeddynamicrangecolorcomponentvalue) separately indicates the available display range. Build 13 waits for both conditions instead of adding a fixed startup delay. Neither condition measures physical luminance.
 - [Determining support for EDR values](https://developer.apple.com/documentation/metal/determining-support-for-edr-values): potential headroom above 1 indicates EDR support; current headroom must be checked separately. Capability does not mean extra range is presently available.
 - [Performing your own tone mapping](https://developer.apple.com/documentation/metal/performing-your-own-tone-mapping): SDR white corresponds to a component value of 1, and EDR rendering must account for current headroom. This does not promise brighter content in other applications.
 - [CAMetalLayer.wantsExtendedDynamicRangeContent](https://developer.apple.com/documentation/quartzcore/cametallayer/wantsextendeddynamicrangecontent): used by the earlier Metal experiment. The menu app uses the paused HDR carrier described in [the method](docs/METHOD.md).

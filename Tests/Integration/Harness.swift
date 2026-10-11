@@ -199,6 +199,106 @@ private final class Trial {
         controller.refresh()
     }
 
+    /// Real-time hold: input arrival and display sampling run on independent
+    /// timers. Never wait for isIdle between repeats; progress is measured before
+    /// key-up so a change that appears only after release cannot pass.
+    func timedHold(_ name: String, duration: TimeInterval, fine: Bool,
+                   requiresNativeProgress: Bool, requiresGammaProgress: Bool) throws -> Bool {
+        let start = ProcessInfo.processInfo.systemUptime
+        let initialNative = nativeValue
+        let initialGamma = try GammaTable.read(display: baseline.identity.displayID)
+        var samples = [[String: Any]]()
+        var inputCount = 0
+        var firstNativeChange: TimeInterval?
+        var firstGammaChange: TimeInterval?
+        var firstOn: TimeInterval?
+        var timerFailure: Error?
+
+        func sendHeldDown() {
+            let now = ProcessInfo.processInfo.systemUptime
+            let consumed = controller.handle(BrightnessKeyEvent(direction: .up, phase: .down,
+                                                                isRepeat: inputCount > 0, fine: fine))
+            events.append(["time": now, "trial": name, "direction": "up", "phase": "down",
+                           "repeat": inputCount > 0, "fine": fine, "consumed": consumed,
+                           "native": nativeValue, "factor": session.desiredFactor,
+                           "session": String(describing: session.state)])
+            inputCount += 1
+            if !consumed { timerFailure = DisplayError.invalid("Timed held-Up event passed through in \(name).") }
+        }
+        func sample() {
+            do {
+                let now = ProcessInfo.processInfo.systemUptime
+                let gamma = try GammaTable.read(display: baseline.identity.displayID)
+                let currentNative = nativeValue
+                let gammaDifference = gamma.maxDifference(from: initialGamma)
+                if firstNativeChange == nil, currentNative > initialNative + 0.002 { firstNativeChange = now }
+                if firstGammaChange == nil, gammaDifference > 0.0005 { firstGammaChange = now }
+                if firstOn == nil, session.state == .on { firstOn = now }
+                samples.append(["time": now, "sinceStart": now - start, "keyStillHeld": true,
+                                "native": currentNative, "gammaDifferenceFromHoldStart": gammaDifference,
+                                "gammaMaximum": gamma.maximum, "factor": session.desiredFactor,
+                                "session": String(describing: session.state), "queueIdle": controller.isIdle,
+                                "inputCount": inputCount])
+                sawHUD = sawHUD || NSApp.windows.contains { $0.title == "Headroom Brightness" && $0.isVisible }
+            } catch { timerFailure = error }
+        }
+
+        sample()
+        sendHeldDown()
+        let inputTimer = Timer(timeInterval: 1.0 / 30, repeats: true) { _ in sendHeldDown() }
+        let sampleTimer = Timer(timeInterval: 0.05, repeats: true) { _ in sample() }
+        RunLoop.main.add(inputTimer, forMode: .common)
+        RunLoop.main.add(sampleTimer, forMode: .common)
+        while ProcessInfo.processInfo.systemUptime < start + duration && timerFailure == nil { pump(0.01) }
+        inputTimer.invalidate()
+        sampleTimer.invalidate()
+        sample() // Last actual read occurs while the key is still logically held.
+        let nativeBeforeKeyUp = nativeValue
+        let gammaBeforeKeyUp = try? GammaTable.read(display: baseline.identity.displayID)
+        let stateBeforeKeyUp = String(describing: session.state)
+        let factorBeforeKeyUp = session.desiredFactor
+        let keyUpAt = ProcessInfo.processInfo.systemUptime
+        let releaseConsumed = controller.handle(BrightnessKeyEvent(direction: .up, phase: .up, fine: fine))
+        events.append(["time": keyUpAt, "trial": name, "direction": "up", "phase": "up",
+                       "repeat": false, "fine": fine, "consumed": releaseConsumed,
+                       "native": nativeBeforeKeyUp, "factor": factorBeforeKeyUp,
+                       "session": stateBeforeKeyUp])
+        pump(0.3)
+        let nativeAfterRelease = nativeValue
+        let gammaAfterRelease = try? GammaTable.read(display: baseline.identity.displayID)
+        let nativePassed = !requiresNativeProgress || firstNativeChange.map { $0 < keyUpAt } == true
+        let gammaPassed = !requiresGammaProgress || (firstGammaChange.map { $0 < keyUpAt } == true && stateBeforeKeyUp == "on")
+        let passed = timerFailure == nil && releaseConsumed && nativePassed && gammaPassed && inputCount >= Int(duration * 20)
+        let result: [String: Any] = [
+            "name": name, "passed": passed, "requestedFrequencyHz": 30,
+            "holdStartedAt": start, "keyUpAt": keyUpAt, "actualHoldDuration": keyUpAt - start,
+            "inputCount": inputCount, "releaseConsumed": releaseConsumed,
+            "firstNativeChangeAt": firstNativeChange as Any? ?? NSNull(),
+            "firstGammaChangeAt": firstGammaChange as Any? ?? NSNull(),
+            "firstOnAt": firstOn as Any? ?? NSNull(),
+            "nativeBeforeHold": initialNative, "nativeBeforeKeyUp": nativeBeforeKeyUp,
+            "nativeAfterRelease": nativeAfterRelease,
+            "gammaDifferenceBeforeKeyUp": gammaBeforeKeyUp.map { $0.maxDifference(from: initialGamma) } as Any? ?? NSNull(),
+            "gammaDifferenceAfterRelease": gammaAfterRelease.map { $0.maxDifference(from: initialGamma) } as Any? ?? NSNull(),
+            "factorBeforeKeyUp": factorBeforeKeyUp, "stateBeforeKeyUp": stateBeforeKeyUp,
+            "requiresNativeProgress": requiresNativeProgress, "requiresGammaProgress": requiresGammaProgress,
+            "error": timerFailure?.localizedDescription as Any? ?? NSNull(), "samplesBeforeRelease": samples
+        ]
+        checks.append(result)
+        print("TIMED HOLD \(name): passed=\(passed), inputCount=\(inputCount), nativeBeforeKeyUp=\(nativeBeforeKeyUp), stateBeforeKeyUp=\(stateBeforeKeyUp)")
+        fflush(stdout)
+        return passed
+    }
+
+    func restoreTablesForNextCase() throws {
+        controller.cancelPending()
+        session.stop(reason: "Timed hold trial boundary")
+        try wait("table restoration between timed holds") { !session.busy }
+        let gamma = try GammaTable.read(display: baseline.identity.displayID)
+        try require(gamma.maxDifference(from: baseline.gamma) <= 0.0005, "Timed hold did not restore original tables.")
+        controller.refresh()
+    }
+
     func run() throws {
         var failure: Error?
         do {
@@ -235,6 +335,40 @@ private final class Trial {
             } else {
                 checks.append(["name": "boost-unavailable", "skipped": true])
             }
+
+            var timedHoldFailures = [String]()
+            try setStartingNative(0.5)
+            if try !timedHold("30hz-native-up-progress-before-keyup", duration: 3, fine: false,
+                              requiresNativeProgress: true, requiresGammaProgress: false) {
+                timedHoldFailures.append("native range")
+            }
+            try restoreTablesForNextCase()
+            if session.supportsBoost {
+                try setStartingNative(1)
+                if try !timedHold("30hz-short-cold-boost-progress-before-keyup", duration: 0.75, fine: true,
+                                  requiresNativeProgress: false, requiresGammaProgress: true) {
+                    timedHoldFailures.append("750ms cold boost")
+                }
+                try restoreTablesForNextCase()
+                try setStartingNative(1)
+                if try !timedHold("30hz-cold-boost-progress-before-keyup", duration: 4, fine: true,
+                                  requiresNativeProgress: false, requiresGammaProgress: true) {
+                    timedHoldFailures.append("cold boost")
+                }
+                try restoreTablesForNextCase()
+                try setStartingNative(1)
+                session.setLevel(1.1)
+                session.start()
+                try wait("active boost for timed fine-repeat trial", timeout: 12) { session.state == .on }
+                pump(0.15)
+                if try !timedHold("30hz-active-boost-progress-before-keyup", duration: 3, fine: true,
+                                  requiresNativeProgress: false, requiresGammaProgress: true) {
+                    timedHoldFailures.append("active boost")
+                }
+                try restoreTablesForNextCase()
+            }
+            try require(timedHoldFailures.isEmpty,
+                        "Held Up had no required real display progress before key-up: \(timedHoldFailures.joined(separator: ", ")).")
 
             try setStartingNative(0.5)
             // Queue repeat events quickly, then release. Real queued writes must

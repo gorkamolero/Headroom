@@ -179,7 +179,9 @@ final class BoostSession {
                 update()
                 return
             }
-            let activation = try HDRCarrier(screen:screen)
+            let activation = try HDRCarrier(screen:screen, currentHeadroom: { [weak self] in
+                Double(self?.screen.maximumExtendedDynamicRangeColorComponentValue ?? 0)
+            })
             carrier = activation
             activation.prepare { [weak self] result in
                 guard let self, self.token == attempt, self.state == .preparing else {return}

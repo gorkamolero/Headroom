@@ -12,7 +12,7 @@ Physical display identity, display mode, and color-profile configuration are rec
 
 For a display entering boost above a factor of 1, `HDRCarrier` creates a transparent 5 × 5 point nonactivating panel with a 1 × 1 point `AVPlayerLayer`. It loads this project's own 64 × 64 pixel black HLG sample, encoded as 10-bit HEVC. The player is muted and remains at rate zero: there is no play, seek, loop, screen capture, or continuous rendering routine.
 
-Preparation waits for both the asset and a displayable first frame, then gives macOS 1.5 seconds to settle. An eight-second preparation timeout prevents an indefinite wait. Current EDR headroom is checked before starting any table change. The sample's [generation command and provenance](../Sources/DisplayActivation/Resources/RESOURCE-ORIGIN.md) are included in the source.
+Preparation waits for the asset, a displayable first frame, and current EDR headroom above 1.01. It proceeds immediately when all are ready; if headroom is not yet available, a temporary 40 ms timer checks again within an eight-second preparation timeout. There is no fixed startup delay. Current headroom is checked again before starting any table change. The sample's [generation command and provenance](../Sources/DisplayActivation/Resources/RESOURCE-ORIGIN.md) are included in the source.
 
 Extra dimming below a factor of 1 skips HDR preparation and uses only the table adjustment and recovery helper.
 

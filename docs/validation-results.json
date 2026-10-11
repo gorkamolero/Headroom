@@ -488,5 +488,110 @@
       "remainingJournals": 0,
       "independentWatchdogRestorationPassed": true
     }
+  },
+  "candidate050Build13": {
+    "scope": "Cold boost startup latency. Real display readbacks during timer-driven normalized key repeats; not operating-system keyboard injection or instrumented luminance.",
+    "unitTestsPassed": 74,
+    "releaseBuildPassed": true,
+    "deepStrictSignatureVerified": true,
+    "installedBuild": 13,
+    "fixedStartupDelayRemoved": true,
+    "readinessPollMilliseconds": 40,
+    "preparationTimeoutSeconds": 8,
+    "baselineTimedHolds": [
+      {
+        "name": "30hz-native-up-progress-before-keyup",
+        "passed": true,
+        "inputCount": 91,
+        "requestedFrequencyHz": 30,
+        "firstNativeChangeMilliseconds": 50.525,
+        "firstGammaChangeMilliseconds": 1900.818,
+        "keyReleaseMilliseconds": 3008.156,
+        "stateBeforeKeyUp": "on",
+        "gammaDifferenceBeforeKeyUp": 0.16656893491744995,
+        "releaseConsumed": true
+      },
+      {
+        "name": "30hz-cold-boost-progress-before-keyup",
+        "passed": true,
+        "inputCount": 121,
+        "requestedFrequencyHz": 30,
+        "firstNativeChangeMilliseconds": null,
+        "firstGammaChangeMilliseconds": 1601.78,
+        "keyReleaseMilliseconds": 4004.455,
+        "stateBeforeKeyUp": "on",
+        "gammaDifferenceBeforeKeyUp": 0.16656893491744995,
+        "releaseConsumed": true
+      },
+      {
+        "name": "30hz-active-boost-progress-before-keyup",
+        "passed": true,
+        "inputCount": 91,
+        "requestedFrequencyHz": 30,
+        "firstNativeChangeMilliseconds": null,
+        "firstGammaChangeMilliseconds": 51.825,
+        "keyReleaseMilliseconds": 3004.342,
+        "stateBeforeKeyUp": "on",
+        "gammaDifferenceBeforeKeyUp": 0.08328443765640259,
+        "releaseConsumed": true
+      }
+    ],
+    "updatedTimedHolds": [
+      {
+        "name": "30hz-native-up-progress-before-keyup",
+        "passed": true,
+        "inputCount": 91,
+        "requestedFrequencyHz": 30,
+        "firstNativeChangeMilliseconds": 50.895,
+        "firstGammaChangeMilliseconds": 350.906,
+        "keyReleaseMilliseconds": 3008.012,
+        "stateBeforeKeyUp": "on",
+        "gammaDifferenceBeforeKeyUp": 0.16656893491744995,
+        "releaseConsumed": true
+      },
+      {
+        "name": "30hz-short-cold-boost-progress-before-keyup",
+        "passed": true,
+        "inputCount": 23,
+        "requestedFrequencyHz": 30,
+        "firstNativeChangeMilliseconds": null,
+        "firstGammaChangeMilliseconds": 101.546,
+        "keyReleaseMilliseconds": 758.672,
+        "stateBeforeKeyUp": "on",
+        "gammaDifferenceBeforeKeyUp": 0.16656893491744995,
+        "releaseConsumed": true
+      },
+      {
+        "name": "30hz-cold-boost-progress-before-keyup",
+        "passed": true,
+        "inputCount": 121,
+        "requestedFrequencyHz": 30,
+        "firstNativeChangeMilliseconds": null,
+        "firstGammaChangeMilliseconds": 101.756,
+        "keyReleaseMilliseconds": 4005.303,
+        "stateBeforeKeyUp": "on",
+        "gammaDifferenceBeforeKeyUp": 0.16656893491744995,
+        "releaseConsumed": true
+      },
+      {
+        "name": "30hz-active-boost-progress-before-keyup",
+        "passed": true,
+        "inputCount": 91,
+        "requestedFrequencyHz": 30,
+        "firstNativeChangeMilliseconds": null,
+        "firstGammaChangeMilliseconds": 51.462,
+        "keyReleaseMilliseconds": 3003.535,
+        "stateBeforeKeyUp": "on",
+        "gammaDifferenceBeforeKeyUp": 0.08328443765640259,
+        "releaseConsumed": true
+      }
+    ],
+    "replayedEvents": 584,
+    "allReplayedEventsConsumed": true,
+    "harnessPassed": true,
+    "gammaRestorationMaximumDifference": 0,
+    "nativeRestorationDifference": 0,
+    "remainingJournals": 0,
+    "physicalKeyboardEndToEndVerified": false
   }
 }

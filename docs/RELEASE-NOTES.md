@@ -1,4 +1,6 @@
-# Headroom 0.5.0 — local candidate, build 12
+# Headroom 0.5.0 — local candidate, build 13
+
+- Removed the fixed 1.5-second boost startup delay. Activation now proceeds as soon as the HDR frame and current display headroom are ready. Timed Up-repeat tests check actual display-table changes before release, including a 750 ms hold. Normal brightness and Down handling are unchanged.
 
 - Automatic brightness-key handling while Headroom runs. Accessibility permission is requested once on first use; later launches report missing access in the menu without repeating the prompt. Headroom owns supported keys across normal hardware brightness, boost, and extra dimming. No release or second press is needed at either boundary.
 - Holding Down lowers hardware brightness to a 1% slider setting, then enters extra software dimming without lowering the backlight further. If hardware brightness is already zero, Up raises it and Down leaves it off. The hardware percentage is not a physical luminance measurement.

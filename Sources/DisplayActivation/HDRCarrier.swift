@@ -15,23 +15,25 @@ public final class HDRCarrier {
     private let item: AVPlayerItem
     private let player: AVPlayer
     private let playerLayer: AVPlayerLayer
+    private let currentHeadroom: (() -> Double)?
     private var statusObservation: NSKeyValueObservation?
     private var displayObservation: NSKeyValueObservation?
     private var timeout: Timer?
-    private var settle: Timer?
+    private var readinessPoll: Timer?
     private var completion: ((Result<Void, Error>) -> Void)?
     private var generation = UUID()
     private var preparing = false
     private var prepared = false
     private var closed = false
 
-    public init(screen: NSScreen) throws {
+    public init(screen: NSScreen, currentHeadroom: (() -> Double)? = nil) throws {
         guard Thread.isMainThread else {
             throw Self.error(1, "The HDR carrier must be created on the main thread.")
         }
         guard let resource = Bundle.module.url(forResource: "black-hlg", withExtension: "mov") else {
             throw Self.error(2, "The independently generated HDR sample is missing.")
         }
+        self.currentHeadroom = currentHeadroom
         // Keep the 1-point sample visible at this display's upper-left edge.
         // This intentionally adapts the reference geometry for multiple displays.
         windowFrame = NSRect(x: screen.frame.minX, y: screen.frame.maxY - 1, width: 5, height: 5)
@@ -74,7 +76,7 @@ public final class HDRCarrier {
         let token = UUID()
         generation = token
         let timeout = Timer(timeInterval: 8, repeats: false) { [weak self] _ in
-            self?.finish(token: token, result: .failure(Self.error(5, "The paused HDR sample did not become ready within eight seconds.")))
+            self?.finish(token: token, result: .failure(Self.error(5, "The HDR sample and extra brightness did not become ready within eight seconds.")))
         }
         self.timeout = timeout
         // Native menu tracking uses a nested run loop; all preparation work
@@ -91,22 +93,31 @@ public final class HDRCarrier {
 
     private func checkStatus(token: UUID) {
         guard !closed, preparing, generation == token else { return }
+        if let error = player.error {
+            finish(token: token, result: .failure(error))
+            return
+        }
         switch item.status {
         case .failed:
             finish(token: token, result: .failure(item.error ?? Self.error(6, "The paused HDR sample could not be loaded.")))
         case .readyToPlay:
-            guard playerLayer.isReadyForDisplay, settle == nil else { return }
-            let work = Timer(timeInterval: 1.5, repeats: false) { [weak self] _ in
-                guard let self, !self.closed, self.preparing, self.generation == token else { return }
-                guard self.item.status == .readyToPlay, self.playerLayer.isReadyForDisplay, self.player.error == nil else {
-                    self.finish(token: token, result: .failure(self.item.error ?? self.player.error ?? Self.error(7, "The HDR sample stopped being ready.")))
-                    return
-                }
-                // Loading readiness is an API-level condition. The app still
-                // checks live EDR headroom and asks the user to assess gain.
-                self.finish(token: token, result: .success(()))
+            guard playerLayer.isReadyForDisplay else { return }
+            // First-frame readiness does not establish that the display has
+            // made EDR headroom available. Read the live value independently
+            // and finish immediately when both conditions hold.
+            let headroom = currentHeadroom?() ?? Double(window.screen?.maximumExtendedDynamicRangeColorComponentValue ?? 0)
+            if headroom.isFinite, headroom > 1.01 {
+                finish(token: token, result: .success(()))
+                return
             }
-            settle = work
+            guard readinessPoll == nil else { return }
+            // This short-lived control poll neither renders nor plays video.
+            // The original eight-second timeout remains the overall budget.
+            let work = Timer(timeInterval: 0.04, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                self.checkStatus(token: token)
+            }
+            readinessPoll = work
             RunLoop.main.add(work, forMode: .common)
         case .unknown: break
         @unknown default:
@@ -119,7 +130,7 @@ public final class HDRCarrier {
         completion = nil
         preparing = false
         timeout?.invalidate(); timeout = nil
-        settle?.invalidate(); settle = nil
+        readinessPoll?.invalidate(); readinessPoll = nil
         statusObservation?.invalidate(); statusObservation = nil
         displayObservation?.invalidate(); displayObservation = nil
         if case .success = result { prepared = true }
@@ -134,7 +145,7 @@ public final class HDRCarrier {
         generation = UUID()
         completion = nil
         timeout?.invalidate(); timeout = nil
-        settle?.invalidate(); settle = nil
+        readinessPoll?.invalidate(); readinessPoll = nil
         statusObservation?.invalidate(); statusObservation = nil
         displayObservation?.invalidate(); displayObservation = nil
         window.orderOut(nil)
