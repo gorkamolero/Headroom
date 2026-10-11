@@ -2,17 +2,17 @@
 
 # Headroom
 
-A small macOS menu bar app for brighter everyday desktop content on compatible XDR displays.
+A small macOS menu bar app for extra dimming and brighter everyday desktop content on compatible displays.
 
-**0.4.0 · Community beta**
+**0.5.0 · Community beta**
 
-Headroom uses the extra brightness range that macOS makes available for HDR content. It stays in your menu bar, with an on/off switch and brightness slider for each display. There is no main window, account, screen recording, or continuous video playback.
+Use your brightness keys across the normal display range, into extra dimming below it, and into HDR/EDR boost above it. Headroom keeps independent controls for each display in a compact black-sun menu. There is no main window, account, screen recording, or continuous video playback.
 
 ## Install
 
-1. Open [Releases](https://github.com/gorkamolero/Headroom/releases) and download **Headroom-0.4.0-community-beta-arm64.zip**.
-2. Double-click the ZIP to extract it, then drag **Headroom.app** into **Applications**.
-3. Open **Headroom** from Applications.
+1. Open [Releases](https://github.com/gorkamolero/Headroom/releases) and download **Headroom-0.5.0-community-beta-arm64.zip**.
+2. Quit an older Headroom copy and other brightness-control utilities, including Lunar, before replacing or opening Headroom.
+3. Double-click the ZIP, drag **Headroom.app** into **Applications**, then open it there.
 
 If macOS says the developer cannot be verified or Apple could not check the app:
 
@@ -20,67 +20,67 @@ If macOS says the developer cannot be verified or Apple could not check the app:
 2. Scroll to **Security** and click **Open Anyway** next to the message about Headroom.
 3. Authenticate if asked, then click **Open** in the confirmation dialog.
 
-That saves an exception for Headroom, so subsequent launches work normally. If **Open Anyway** is missing, try opening Headroom from Applications once more, then return to Privacy & Security. This is [Apple's per-app opening procedure](https://support.apple.com/102445). The beta is ad-hoc signed, not Developer ID signed or notarized. **You do not need to build from source to use the downloaded app.**
+This saves an exception for Headroom. If **Open Anyway** is missing, try opening Headroom from Applications once more, then return to Privacy & Security; managed Macs may restrict this option. This is [Apple's per-app opening procedure](https://support.apple.com/102445). These steps apply to an unidentified-developer or unnotarized-app alert, not a damaged-app or malware alert.
+
+The 0.5.0 community build uses a persistent self-signed certificate. It is **not Developer ID signed or notarized**. **No compiling or Apple Developer membership is needed to use the downloaded app.**
+
+### Allow brightness keys
+
+On first use, allow **Headroom** in **System Settings → Privacy & Security → Accessibility**. Brightness-key handling starts automatically while the app is running; the menu controls work without this permission. Headroom's menu indicates when access is missing.
+
+Upgrading from an older ad-hoc signed build can require approving Headroom once again because 0.5.0 introduces a persistent signing identity. If the old entry remains enabled but Headroom still reports missing access, remove that old Headroom entry and add **/Applications/Headroom.app**, then enable it. Subsequent releases signed with the same certificate are intended to preserve the permission; macOS remains in control of approval. No certificate installation or system-wide security change is needed.
 
 ## Using Headroom
 
-1. Click the black sun in the menu bar. Headroom starts **off**.
-2. Enable a supported display and adjust its slider.
-3. Switch it off to restore that display, or choose **Quit Headroom** to restore all active displays and exit.
+- **Brighter:** hold the brightness-up key through the normal range and into boost at maximum.
+- **Dimmer:** hold brightness-down through the normal range to the 1% hardware setting, then into extra software dimming.
+- **Returning to normal:** hold in the opposite direction. Headroom restores the saved color tables at the boundary, then continues adjusting normal brightness without a second press.
+- **Smaller steps:** hold **Option + Shift** with a brightness key.
+- **Per-display controls:** click the black sun, enable a display, and move its slider. Switch it off to restore that display's original color tables.
 
-Headroom saves the slider setting for each display. After sleep, wake, locking, or a display configuration change, enable boost again when you want it. If extra brightness is unavailable, the menu says so.
+The indicator reads **Display −**, **Display**, or **Display +** for extra dimming, normal brightness, and boost. Its evenly spaced ticks mark the ranges. A held key pauses briefly at a boundary before continuing, making the transition easier to judge. Releasing and pressing again, or reversing direction, skips that pause.
 
-The app currently targets **Apple Silicon and macOS 13 or later**. Live testing has covered an M5 Pro MacBook Pro's built-in Liquid Retina XDR display on macOS 27.0.1. Other Mac, display, and OS combinations need confirmation. A display advertising EDR support may still have no extra brightness available under its current settings.
+On launch, display adjustment is off. Headroom remembers each display's slider position. Sleep, locking, and display configuration changes stop current adjustments; use the keys or menu when you want to start again. If extra brightness is unavailable, the menu says so. If the backlight is already at zero, brightness-up raises it and brightness-down leaves it off.
 
-### Next beta: brightness keys and extra dimming
+Keys target the built-in display when connected, otherwise the primary display. Independent menu controls remain available for other displays. Keyboard handling pauses while Lunar is running; Headroom does not quit other apps for you. Where native brightness control is unavailable, ordinary keys fall back to macOS.
 
-The local 0.5.0 candidate handles brightness keys automatically while running. This is not included in the public 0.4.0 download. On first use, Headroom requests Accessibility permission; allow it in **System Settings → Privacy & Security → Accessibility**. The menu reports when permission is needed. On a supported display:
+Switching off or choosing **Quit Headroom** restores the original color tables. The normal hardware brightness you selected with the keys stays at its last setting, just as it does with ordinary brightness controls.
 
-- **Brighter:** hold Up through the normal brightness range and into boost at maximum.
-- **Dimmer:** hold Down through the normal range to the 1% hardware setting, then into extra software dimming. Holding Up reverses the dimming, restores the saved color tables, and continues increasing hardware brightness.
-- **Back from boost:** holding Down reduces boost, restores the saved color tables, and continues reducing hardware brightness.
-- No release or second press is needed at either boundary. If the backlight is already at zero, Up raises hardware brightness; Down leaves it off.
-- **Smaller steps:** hold **Option + Shift** while pressing a brightness key.
+### The nits readout
 
-Headroom handles supported keys across the hardware, extra bright, and extra dim ranges and presents one compact overlay labeled **Display**, **Display +**, or **Display −**. It uses Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older versions: a white bar, evenly spaced tick marks, and sun icons that fade after the key press. If native brightness control is unavailable, ordinary keys fall back to macOS.
+The menu and brightness indicator show **estimated nits**. Normal brightness uses macOS reporting with a preset-based fallback; extra dimming and boost apply an assumed light-response model to the confirmed display adjustment. **Display +** explicitly shows **≈… nits est.** Missing or unsettled readings show **— nits**.
 
-The local build 20 candidate shows **estimated nits across all three brightness ranges**. Native brightness comes from macOS's nits reporting, with a linear-brightness/preset fallback. Normal and dimmed estimates use **≈**; extra dimming assumes an sRGB response to the acknowledged colour-table adjustment.
+These estimates are uncalibrated: no light meter has verified them, and a displayed value such as 1600 nits is not a measurement or a promise of sustained desktop brightness. The slider's 0.1–2.0 table range is also not a physical brightness ratio. See the [calculation and assumptions](docs/METHOD.md#estimated-nits-and-hdr-capacity--local-build-20).
 
-**Display + shows a calculated estimate**, labelled **≈… nits est.** The model applies an extended-sRGB response to the adjustment acknowledged by the recovery helper, then caps its prediction at the live HDR capacity. This is an explicit, uncalibrated assumption: the display-table readback clamps values above 1 and does not establish the actual light response. A displayed estimate of 1600 nits is not a measurement or a promise of sustained desktop brightness. Missing readings or unsettled adjustments show **— nits**. [Calculation and assumptions](docs/METHOD.md#estimated-nits-and-hdr-capacity--local-build-20). Build 20 supersedes build 19's capacity-only readout. These features are not included in the public 0.4.0 download.
+## Compatibility
 
-The candidate's per-display menu slider covers a table factor from 0.1 through 1 (normal) to the available boost ceiling, at most 2.0. Extra dimming scales the same saved original color tables downward and does not start the HDR carrier. A factor of 0.1 does not mean 10% of physical brightness.
-
-Switching a display off or quitting restores its original color tables. The hardware brightness you selected with the keys remains at its last setting, as it does with ordinary brightness controls. The 1% hardware floor is a slider setting, not a measured luminance percentage.
-
-Keys target the built-in display when connected, otherwise the primary display; the per-display menu switches and sliders remain available. Keyboard control pauses while Lunar is running; Headroom never quits it for you. Physical-key repetition and the boundary handoff remain separate live checks. See the [validation record](VALIDATION.md) for results by build.
+Headroom targets **Apple Silicon and macOS 13 or later**. Live testing has covered an M5 Pro MacBook Pro's built-in Liquid Retina XDR display on macOS 27.0.1. Other Mac, display, and OS combinations need confirmation. Extra brightness requires a compatible HDR/EDR display with headroom currently available. The indicator uses Apple's glass on macOS 26 or later and a vibrancy panel on older versions.
 
 ## Designed to restore your display
 
-Headroom saves the original red, green, and blue display tables before changing them. Every slider adjustment starts from those originals, so adjustments cannot accumulate. A separate recovery helper watches the app, and a saved recovery record supports restoration after an interrupted session.
+Headroom saves the original red, green, and blue display tables before changing them. Every adjustment starts from those originals, so adjustments cannot accumulate. A separate helper watches the app, and a saved recovery record supports restoration after an interrupted session.
 
-Recorded tests restored the original tables with an **exact numerical readback match**, including normal disable, lost communication, termination, and crash-recovery scenarios. The menu app also restored exactly after testing its maximum input scale. The [validation record](VALIDATION.md) identifies which app version and activation method each result covers.
+Recorded tests restored the original tables with an **exact numerical readback match**, including normal disable, lost communication, termination, and crash-recovery scenarios. The [validation record](VALIDATION.md) distinguishes build-specific tests from the compatibility checks still outstanding.
 
-These are concrete safeguards, not a promise that every hardware or macOS failure is impossible. This beta uses a public display API beyond its documented input range; compatibility and color behavior vary. If a session is interrupted, reopen Headroom with the affected display connected so it can process its saved recovery record. See [recovery and troubleshooting](docs/RECOVERY.md).
+This beta uses transfer-table values above Apple's documented range when boosting; behavior and color can vary between systems. Recovery safeguards reduce the impact of failures but cannot guarantee every hardware or OS condition. If a session is interrupted, reopen Headroom with the affected display connected so it can process its saved recovery record. See [recovery and troubleshooting](docs/RECOVERY.md).
 
 ## How it works
 
-Headroom presents a tiny, paused HDR surface to make EDR headroom available, then scales the display's saved RGB transfer tables. The HDR sample is generated by this project, silent, and loaded into a player that remains paused. Headroom does not capture or redraw other apps.
+Extra dimming scales the saved display tables downward. Boost adds a tiny, paused HDR surface to make EDR headroom available, then scales those tables upward. The silent HDR sample is generated by this project; Headroom does not capture or redraw other apps.
 
-The slider controls a table multiplier up to 2.0, further limited by available headroom. **It is not a measured brightness multiplier or a promise of a particular nit level.** Brightness and color depend on the display, macOS, its preset, and ambient conditions. The [method](docs/METHOD.md) explains the implementation and its limits, with [Apple documentation](APPLE-SOURCES.md) alongside it.
+Native-brightness control and nits reporting use small, isolated compatibility adapters for private macOS interfaces. If those interfaces are unavailable, the affected control or reading falls back or reports unavailability. The [method](docs/METHOD.md) explains the implementation and limits, with [Apple documentation](APPLE-SOURCES.md) alongside it.
 
 ## Privacy and permissions
 
-Headroom runs locally. It has no telemetry, account system, network client, or automatic updater. It does not request Screen Recording, camera, microphone, or Full Disk Access permissions. It installs no login item or permanent background service.
+Headroom runs locally, without telemetry, accounts, an app network client, or an automatic updater. It does not request Screen Recording, camera, microphone, or Full Disk Access permissions. It installs no login item or permanent background service.
 
-The 0.4.0 release needs no Accessibility permission. In the development version, brightness-key handling starts automatically and requires Accessibility; the menu controls work without it. It checks event codes to recognize brightness buttons. Other keys pass through unchanged; typed characters are never read or recorded.
+Accessibility permission enables brightness-key handling. Headroom checks event codes to recognize brightness buttons; other keys pass through unchanged, and typed characters are never read or recorded.
 
-An update to an ad-hoc signed beta may require enabling Headroom in Accessibility again. These builds do not have a stable signing identity across versions; this is part of [macOS's app identity checks](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements). For frequent local updates, the [persistent local signing workflow](docs/RELEASING.md#persistent-signing-for-local-updates) reuses one certificate-bound identity. Moving to that identity needs one approval; routine updates should then preserve the grant, subject to macOS policy. Local signing is separate from public Developer ID signing and notarization.
-
-The app stores per-display slider preferences and local recovery data. Recovery records contain display identifiers and the original color tables; they are retained when recovery needs another attempt. See [local data and removal](docs/RECOVERY.md#local-data-and-removal).
+The app stores per-display slider preferences and local recovery data. Recovery records contain display identifiers and original color tables; they are retained when recovery needs another attempt. See [local data and removal](docs/RECOVERY.md#local-data-and-removal).
 
 ## Build from source
 
-Use Xcode or Apple's Swift command-line tools on a Mac:
+Building is optional. To use the packaged app, follow [Install](#install). Developers need **Xcode 26 or later with the macOS 26 SDK**. The app still targets macOS 13 or later; the newer SDK is required to compile its glass interface support:
 
 ```sh
 swift test
@@ -88,12 +88,12 @@ swift test
 open "$PWD/dist/Headroom.app"
 ```
 
-Building from source is optional and requires no Apple Developer membership. To use the packaged app, follow [Install](#install) above. [Release packaging](docs/RELEASING.md) documents the beta build and optional future notarization.
+That command creates a separate ad-hoc development build; it does not reproduce the maintainer's persistent signing identity. [Release packaging](docs/RELEASING.md) explains the signed community artifact and optional source archive.
 
-The source also includes `HeadroomLab`, the earlier bounded Metal experiment, for development. It is not part of the normal menu-bar experience.
+The repository also contains `HeadroomLab`, the earlier bounded Metal experiment, for development. It is not part of the normal menu-bar experience.
 
 ## Feedback
 
-Useful reports include your Mac model, macOS version, display model and connection, whether ordinary content becomes brighter, and whether switching off returns it to normal. Include the menu's error text when relevant. Avoid posting full recovery journals because they contain display identifiers.
+Useful reports include your Mac model, macOS version, display model and connection, whether keys move correctly between ranges, and whether switching off restores normal appearance. Include the menu's error text when relevant. Avoid posting full recovery journals because they contain display identifiers.
 
 See [release notes](docs/RELEASE-NOTES.md), [validation](VALIDATION.md), and [the technical method](docs/METHOD.md). Headroom is an independent project by Gorka Molero.

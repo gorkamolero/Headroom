@@ -1,4 +1,39 @@
-# Headroom 0.5.0 — local candidate, build 21
+# Headroom 0.5.0 — community beta
+
+Brightness keys now move continuously through extra dimming, normal brightness, and HDR/EDR boost. Hold a key to cross ranges without releasing and pressing again; the indicator briefly pauses at each boundary and labels the current range **Display −**, **Display**, or **Display +**.
+
+- Automatic brightness-key handling while Headroom runs, with Option–Shift for smaller steps.
+- Extra dimming below the 1% hardware slider setting and boost above the normal maximum on supported displays.
+- Original color-table restoration before a held key returns to normal hardware adjustment.
+- A compact native-style indicator with evenly spaced ticks and two visible range boundaries.
+- Estimated nits in the indicator and per-display menu. Boost is explicitly labelled **≈… nits est.**; missing or unsettled readings show **— nits**.
+- Independent menu switches and sliders, with saved settings per display.
+- A persistent certificate-bound signing identity for the app and recovery helper, preserved in the release archive.
+
+The nits display is an uncalibrated estimate based on macOS reporting and an assumed response to software adjustment. It is not a light-meter measurement, and a displayed value does not promise sustained full-screen brightness. The [method](METHOD.md#estimated-nits-and-hdr-capacity--local-build-20) explains the calculation; [validation](../VALIDATION.md) records build-specific tests and remaining compatibility work.
+
+## Install or update
+
+1. Download **Headroom-0.5.0-community-beta-arm64.zip** and unzip it.
+2. Quit an older Headroom copy and other brightness utilities, including Lunar. Move the new **Headroom.app** into **Applications**, replacing the old app, then open it.
+3. If macOS says the developer cannot be verified or Apple could not check the app, open **System Settings → Privacy & Security → Security → Open Anyway** for Headroom, authenticate if asked, and confirm **Open**.
+4. Allow Headroom in **System Settings → Privacy & Security → Accessibility** for brightness keys. The menu controls also work without that permission.
+5. Use your brightness keys, or click the black sun for per-display controls.
+
+An upgrade from an ad-hoc signed build may need one fresh Accessibility approval. If the older entry appears enabled but Headroom still reports missing access, remove the old Headroom entry and add **/Applications/Headroom.app**, then enable it. Future releases must retain this certificate identity to preserve permission continuity; macOS policy still applies. The locally verified build 20-to-21 update retained brightness-key access with different code hashes and the same certificate-bound requirement.
+
+This community release is self-signed with a persistent certificate, **not Developer ID signed or notarized**. No compiling, certificate installation, or Apple Developer membership is needed to use it. Source and checksums are separate release assets. macOS remembers the per-app opening exception; managed Macs may restrict it. See [Apple's opening instructions](https://support.apple.com/102445). Do not apply these exception steps to a damaged-app or malware alert.
+
+The app targets Apple Silicon and macOS 13 or later. Live testing has covered an M5 Pro internal XDR display on macOS 27.0.1. Native-brightness and nits adapters depend on private macOS interfaces and report unavailable data or fall back when those interfaces cannot be used. Quit restores original color tables; hardware brightness selected with the keys stays at its last setting.
+
+## Development history
+
+The following entries preserve the earlier candidate results and decisions. References to the public 0.4.0 download describe the state at the time of each entry.
+
+<details>
+<summary>0.5.0 candidate builds</summary>
+
+### Build 21 — persistent signing
 
 - Local updates can reuse one certificate-bound signing identity instead of resetting identity with every ad-hoc rebuild. The certificate's private key stays in Keychain; local configuration contains only its public fingerprint and refuses an ad-hoc fallback.
 - After the one-time permission transition, installing build 21 over signed build 20 retained the running app's brightness-key access without another prompt. Both apps have different code hashes and the same certificate-bound requirement.
@@ -6,7 +41,7 @@
 
 Build 21 is installed locally. This signing mode is not Developer ID signing or notarization; the public 0.4.0 release remains unchanged. See [local signing](RELEASING.md#persistent-signing-for-local-updates) and [validation](../VALIDATION.md).
 
-# Headroom 0.5.0 — local candidate, build 20
+### Build 20 — estimated boost nits
 
 - **Display +** now shows a calculated **≈… nits est.** readout in the overlay and per-display menu. It uses the live native nits reference and the table factor acknowledged by the recovery helper, with an explicitly assumed extended-sRGB response capped at live HDR capacity.
 - The estimate assumes the encoded adjustment survives into EDR without clipping before decoding. Normalized table readback clamps values above 1 on the test Mac, so this remains an uncalibrated prediction, not a measured optical response. Tooltip and accessibility text state that limitation; the HDR ceiling remains separate from the predicted value.
@@ -14,7 +49,7 @@ Build 21 is installed locally. This signing mode is not Developer ID signing or 
 
 Build 20 supersedes build 19's capacity-only readout. Build-specific verification and installation status are recorded separately in [VALIDATION.md](../VALIDATION.md). The public 0.4.0 download is unchanged. See the [calculation and assumptions](METHOD.md#estimated-nits-and-hdr-capacity--local-build-20).
 
-# Headroom 0.5.0 — superseded local candidate, build 19
+### Build 19 — superseded capacity-only readout
 
 - Replaced build 18's unsupported boost-nits interpolation. **Display +** now shows a separately labelled **HDR ceiling**, such as **HDR ≤480 nits**; it never presents that capacity as attained desktop brightness.
 - Native SDR white now comes directly from macOS CoreBrightness telemetry, with the existing linear-brightness/preset calculation as a fallback. Extra dimming retains its explicitly assumed sRGB estimate.
@@ -22,14 +57,14 @@ Build 20 supersedes build 19's capacity-only readout. Build-specific verificatio
 
 Superseded by build 20. Installation and evidence are recorded in [VALIDATION.md](../VALIDATION.md). The public 0.4.0 download is unchanged. See the [current calculation and limits](METHOD.md#estimated-nits-and-hdr-capacity--local-build-20).
 
-# Headroom 0.5.0 — superseded local candidate, build 18
+### Build 18 — superseded interpolation
 
 - Added **≈ nits** for **Display +** in the overlay and per-display menu. An uncalibrated model interpolates from live native nits toward the lower of current EDR capacity and the active preset's HDR limit, according to the recovery helper's confirmed adjustment. It stays continuous at the normal/boost boundary and lowers its ceiling when current headroom drops. The tooltip identifies the model; this is not an optical measurement or a claim of sustained full-screen brightness.
 - The read-only compatibility adapter now reads SDR and HDR limits from the same active-preset dictionary alongside linear brightness. Missing or invalid HDR metadata leaves native and dimmed nits available but makes boost nits unavailable. The calculation uses no hardcoded display maximum or potential-headroom substitute. Preparation, restoration, pending recovery, and unsupported readings still show **— nits**.
 
 Build 18 was superseded by build 19; installation and validation status are recorded separately in [VALIDATION.md](../VALIDATION.md). The public 0.4.0 download is unchanged. See the [current method](METHOD.md#estimated-nits-and-hdr-capacity--local-build-20).
 
-# Headroom 0.5.0 — local candidate, build 17
+### Build 17 — brightness keys and dimming
 
 - Added a live **≈ nits** estimate at the upper right of the brightness overlay and in each display's menu controls. It uses the Mac's linear brightness reading and that display's active SDR preset maximum. Extra dimming includes an explicitly assumed sRGB response to confirmed table changes. Unsupported readings, boost, preparation, restoration, and pending recovery display **— nits**. These are calculated estimates, not physical light-meter measurements.
 
@@ -54,7 +89,9 @@ Build-specific test, installation, and visual results are recorded in [VALIDATIO
 
 Updating an ad-hoc signed beta may require enabling Headroom in Accessibility again because the build's identity changes. Headroom preserves macOS's normal permission checks.
 
-# Headroom 0.4.0 — community beta
+</details>
+
+## Headroom 0.4.0 — earlier community beta
 
 Headroom adds a small black-sun menu to macOS with independent brightness controls for compatible XDR displays. It uses the display's available EDR headroom for brighter ordinary desktop content, with a saved slider setting for each display.
 
@@ -70,7 +107,7 @@ The recorded menu scale tests returned every original RGB table sample exactly a
 
 This is an early community beta for Apple Silicon. The build targets macOS 13 or later; live testing has covered an M5 Pro internal XDR display on macOS 27.0.1. Brightness in nits, color accuracy, sustained GPU use, and battery impact have not been measured. The maximum slider setting is a requested table scale, not a measured 2× brightness gain.
 
-## Install the app
+### Install the 0.4.0 app
 
 1. Download **Headroom-0.4.0-community-beta-arm64.zip** from the assets below and unzip it.
 2. Drag **Headroom.app** into **Applications** and open it.

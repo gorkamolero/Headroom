@@ -1,12 +1,12 @@
 # How Headroom works
 
-For extra brightness, Headroom combines an HDR activation surface with a display transfer-table adjustment. Enabling EDR by itself does not document or guarantee an increase in the brightness of other applications. The local 0.5.0 candidate also provides extra dimming by scaling the saved display tables downward, without activating HDR.
+For extra brightness, Headroom combines an HDR activation surface with a display transfer-table adjustment. Enabling EDR by itself does not document or guarantee an increase in the brightness of other applications. Headroom 0.5.0 also provides extra dimming by scaling the saved display tables downward, without activating HDR.
 
 ## 1. Check the display
 
 The app requires a connected, non-mirrored display. For boost, it reads each `NSScreen`'s potential and current EDR headroom and requires potential headroom greater than 1.01. Current headroom is checked again after activation and while boosting. If the system provides no extra range, boost stops and the menu reports unavailability. The candidate's extra dimming path does not require EDR headroom.
 
-Physical display identity, display mode, and color-profile configuration are recorded. The boost and recovery implementation uses public AppKit, Core Graphics, AVFoundation, and QuartzCore APIs. The separate development lab also uses Metal. The local 0.5.0 candidate isolates private APIs in two compatibility adapters: native-brightness control and read-only nits reporting. Its brightness overlay uses public AppKit and SwiftUI controls.
+Physical display identity, display mode, and color-profile configuration are recorded. The boost and recovery implementation uses public AppKit, Core Graphics, AVFoundation, and QuartzCore APIs. The separate development lab also uses Metal. Headroom 0.5.0 isolates private APIs in two compatibility adapters: native-brightness control and read-only nits reporting. Its brightness overlay uses public AppKit and SwiftUI controls.
 
 ## 2. Make an HDR surface available
 
@@ -38,15 +38,15 @@ The menu app sends a heartbeat every second and renews a 30-second lease every t
 
 Normal disable and quit restore the original tables and read them back before retiring the recovery record. Recovery accepts a maximum sample difference of 0.0005; the recorded restoration runs achieved 0.0. A shared lock prevents another Headroom instance or the lab from capturing an already boosted table as a new baseline.
 
-Hardware brightness selected with the candidate's keyboard control persists after disable or quit. The recovery helper owns temporary gamma adjustments; it does not roll back the user's ordinary hardware-brightness setting.
+Hardware brightness selected with Headroom's keyboard control persists after disable or quit. The recovery helper owns temporary gamma adjustments; it does not roll back the user's ordinary hardware-brightness setting.
 
 Recovery checks the physical display and its configuration. If the display is disconnected, its profile has changed, or another transform is active, Headroom retains its record and blocks a new session rather than blindly overwriting the current display state. Reopening the app retries pending recovery for connected displays.
 
 Sleep, display sleep, lock, wake, and relevant display changes end or pause sessions. A new boost requires explicit enable. No privileged helper, login item, firmware change, or permanent background daemon is installed.
 
-## Brightness keys and extra dimming — next beta
+## Brightness keys and extra dimming — 0.5.0
 
-This feature is in development and is not included in the 0.4.0 release. Brightness-key handling starts automatically with the app. Headroom requests Accessibility permission when needed and reports its status in the menu. Once allowed, a Core Graphics event tap handles brightness media keys; other input passes through and is not recorded. Screen Recording is not required.
+This feature is included in 0.5.0. Brightness-key handling starts automatically with the app. Headroom requests Accessibility permission when needed and reports its status in the menu. Once allowed, a Core Graphics event tap handles brightness media keys; other input passes through and is not recorded. Screen Recording is not required.
 
 On a supported display, Headroom consumes brightness-key events across all three ranges and directly sets the native hardware level in the normal range. Holding Up reaches hardware maximum and continues into boost. Holding Down reaches a native setting of 0.01, then continues into software dimming while leaving the backlight at that setting. Neither boundary requires releasing the key or pressing it again. The 0.01 floor is 1% of the native slider range, not 1% of measured luminance. If hardware brightness is already 0, Up raises it through the native setter; Down leaves it off. Scaling color tables cannot light a backlight that is off.
 
@@ -56,9 +56,9 @@ Media-key events contain no physical display UUID. Headroom targets the connecte
 
 Headroom presents one panel labeled Display −, Display, or Display + across supported extra dim, hardware, and extra bright key adjustments, using `NSGlassEffectView` and a native SwiftUI slider on macOS 26 or later, with a compatible vibrancy panel on older systems. It follows the native appearance with a white bar, evenly spaced tick marks, and sun icons, then fades after the key press. Existing ticks at the two range boundaries are taller. Held keys pause for 350 ms at a confirmed boundary before continuing; a fresh press or reversal skips the pause. The bar represents a control position, not measured luminance or a claim of twice the brightness. Supported events are consumed so macOS does not also display its ordinary brightness indicator. Status and errors stay in Headroom's menu.
 
-`NormalBrightnessReader` dynamically loads `DisplayServicesGetBrightness` and `DisplayServicesSetBrightness`. It accepts finite native levels in 0–1, reports API success separately from settled readback, and detects external hardware-brightness changes during a keyboard-controlled gamma session. A missing adapter, failed write, or unavailable reading prevents Headroom from owning normal brightness control; ordinary keys then fall back to macOS. Neither function changes the display preset or automatic-brightness preference. The legacy system OSD was ignored on the test OS, and Apple's modern banner service refused access without its private entitlement, so Headroom uses its own panel with public controls. No Lunar code or assets are included. See [Apple sources](../APPLE-SOURCES.md#brightness-keys--next-beta).
+`NormalBrightnessReader` dynamically loads `DisplayServicesGetBrightness` and `DisplayServicesSetBrightness`. It accepts finite native levels in 0–1, reports API success separately from settled readback, and detects external hardware-brightness changes during a keyboard-controlled gamma session. A missing adapter, failed write, or unavailable reading prevents Headroom from owning normal brightness control; ordinary keys then fall back to macOS. Neither function changes the display preset or automatic-brightness preference. The legacy system OSD was ignored on the test OS, and Apple's modern banner service refused access without its private entitlement, so Headroom uses its own panel with public controls. No Lunar code or assets are included. See [Apple sources](../APPLE-SOURCES.md#brightness-keys--050).
 
-Physical media-key repetition and restoration handoff remain separate live checks; [validation](../VALIDATION.md) records results by build. Updated ad-hoc builds may need Accessibility approval again because their code identity changes; Headroom keeps the normal macOS permission and signature checks.
+Physical media-key repetition and restoration handoff remain separate live checks; [validation](../VALIDATION.md) records results by build. The 0.5.0 packaged app reuses a certificate-bound community signing identity. Moving from an older ad-hoc build requires one permission refresh; a subsequent signed update retained permission in the recorded test. Source-built ad-hoc copies can still require new approval after rebuilding. Headroom keeps normal macOS permission and signature checks.
 
 ## Estimated nits and HDR capacity — local build 20
 
@@ -81,7 +81,7 @@ The curve follows the extended sRGB decoding formula documented in the [W3C colo
 
 The two headroom ratios keep their own reference bases. Public current headroom comes from a freshly resolved, display-matched `NSScreen`. CoreBrightness's raw `Headroom` remains diagnostic only because it can track a request rather than available output. Apple's [tone-mapping documentation](https://developer.apple.com/documentation/metal/performing-your-own-tone-mapping) supports the SDR-white × current-headroom capacity relationship; it does not map gamma adjustments to luminance. The HDR limit comes from system telemetry or the active preset, never a hardcoded 1600-nit maximum.
 
-The overlay and menu label the prediction **≈… nits est.** Tooltip and accessibility text identify the uncalibrated assumption; the tooltip also gives the independent HDR ceiling. The model joins the native reading at factor 1. Increasing the factor changes the prediction until capacity caps it; the slider's endpoint is not mapped to 1600 nits or any other panel maximum. A displayed 1600-nit estimate is not proof of attained or sustained full-screen brightness. Invalid inputs, missing capacity, or a capacity below the native reference produce **— nits**. Physical luminance, colour accuracy, and battery impact remain unmeasured. Build-specific checks and installation status are recorded separately in [VALIDATION.md](../VALIDATION.md); this is local beta work, not part of the public 0.4.0 download.
+The overlay and menu label the prediction **≈… nits est.** Tooltip and accessibility text identify the uncalibrated assumption; the tooltip also gives the independent HDR ceiling. The model joins the native reading at factor 1. Increasing the factor changes the prediction until capacity caps it; the slider's endpoint is not mapped to 1600 nits or any other panel maximum. A displayed 1600-nit estimate is not proof of attained or sustained full-screen brightness. Invalid inputs, missing capacity, or a capacity below the native reference produce **— nits**. Physical luminance, colour accuracy, and battery impact remain unmeasured. Build-specific checks and installation status are recorded separately in [VALIDATION.md](../VALIDATION.md); these features are included in the 0.5.0 community beta.
 
 ### Earlier readouts
 

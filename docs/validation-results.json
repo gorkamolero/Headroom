@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "recordedDate": "2026-10-10",
-  "scope": "Sanitized historical development results; not a complete certification of the 0.4.0 release.",
+  "recordedDate": "2026-10-11",
+  "scope": "Sanitized build-specific development and packaging results for the 0.5.0 community beta, retaining earlier historical evidence; not hardware certification.",
   "environment": {
     "chip": "Apple M5 Pro",
     "display": "Built-in Liquid Retina XDR",
@@ -989,5 +989,24 @@
       "launched": false,
       "existingActiveAppsUnchanged": true
     }
+  },
+  "communityRelease050": {
+    "version": "0.5.0",
+    "build": 21,
+    "date": "2026-10-11",
+    "coreTestsPassed": 110,
+    "archive": "Headroom-0.5.0-community-beta-arm64.zip",
+    "archiveSHA256": "16ab3bf1ebe3271dbae72d05ddcf5798cf324558a99c02d3608fc4b060526141",
+    "packagedInstalledAppWithoutRebuild": true,
+    "extractedAppByteMatchesInstalled": true,
+    "deepStrictSignaturesPassed": true,
+    "appAndHelperCertificateRequirementsPassed": true,
+    "privateKeyIncluded": false,
+    "developerIDSigned": false,
+    "notarized": false,
+    "compilerSourcePathsPresent": true,
+    "sourceBuildRequiresSDK": "macOS 26 / Xcode 26 or later",
+    "physicalLuminanceMeasured": false,
+    "scope": "Release archive audit and repeated unit tests. Publication and destination installation are separate delivery steps."
   }
 }

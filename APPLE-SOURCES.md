@@ -1,6 +1,6 @@
 # Apple sources
 
-Reviewed on 11 October 2026. Headroom is independently implemented with Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no Lunar code or assets are included. Release 0.4.0 uses no private macOS APIs. The local 0.5.0 candidate isolates private integrations in two compatibility adapters: native-brightness control and read-only nits reporting. Its brightness overlay uses public AppKit and SwiftUI controls.
+Reviewed on 11 October 2026. Headroom is independently implemented with Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no Lunar code or assets are included. Release 0.4.0 uses no private macOS APIs. Headroom 0.5.0 isolates private integrations in two compatibility adapters: native-brightness control and read-only nits reporting. Its brightness overlay uses public AppKit and SwiftUI controls.
 
 ## Display behavior
 
@@ -15,7 +15,7 @@ Reviewed on 11 October 2026. Headroom is independently implemented with Apple fr
 
 Apple DTS [reproduced successful transfer-table writes and matching readback without a visible change](https://developer.apple.com/forums/thread/819331) on an M5 Max running macOS 26.3.1, including built-in and external displays. The latest Apple response visible at review still described the reported bugs as open and under investigation. This establishes why readback alone is insufficient; it does not prove that every later OS release or every Mac has the same behavior. Other participants' reports about automatic brightness and HDR interactions are compatibility test leads, not verified Headroom results.
 
-## Brightness keys — next beta
+## Brightness keys — 0.5.0
 
 - Lunar's pinned [MediaKeyTap implementation](https://github.com/alin23/MediaKeyTap/blob/5b8ee686bc90d917cba4f029b47c2a8541a4f58d/MediaKeyTap/MediaKeyTapInternals.swift#L248-L255) uses an active session tap. Its [brightness key mappings](https://github.com/alin23/MediaKeyTap/blob/5b8ee686bc90d917cba4f029b47c2a8541a4f58d/MediaKeyTap/MediaKeyTap.swift#L122-L129) include alternate keycodes 144/145 as well as system-defined events. Headroom independently handles those two formats, including paired releases; it does not remap F14/F15.
 - [CGEvent.tapCreate](https://developer.apple.com/documentation/coregraphics/cgevent/tapcreate(tap:place:options:eventsofinterest:callback:userinfo:)): installs the event tap used to handle brightness media keys. Other events pass through.
@@ -47,7 +47,9 @@ Build 20 shows **≈… nits est.** during boost, using `native nits × ((acknow
 
 - [Display reconfiguration callbacks](https://developer.apple.com/documentation/coregraphics/cgdisplayreconfigurationcallback): display changes require reconciliation; an old numeric display ID is not sufficient for recovery.
 - [NSWorkspace sleep notifications](https://developer.apple.com/documentation/appkit/nsworkspace/willsleepnotification), [wake notifications](https://developer.apple.com/documentation/appkit/nsworkspace/didwakenotification), and [display sleep notifications](https://developer.apple.com/documentation/appkit/nsworkspace/screensdidsleepnotification): system and display sleep are separate lifecycle events.
-- [Notarizing macOS software before distribution](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution): describes the Developer ID signing and notarization workflow for software distributed with Apple's checks. Headroom 0.4.0 instead provides source and an ad-hoc beta: that signature supplies neither a Developer ID identity nor an Apple notarization ticket, and downloaded copies may be blocked by macOS.
+- [Notarizing macOS software before distribution](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution): describes the Developer ID signing and notarization workflow for software distributed with Apple's checks. Headroom 0.5.0 provides source and a community-certificate-signed beta. It supplies neither a Developer ID identity nor an Apple notarization ticket, and downloaded copies may be blocked by macOS.
 - [TN3127: Inside Code Signing: Requirements](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements): explains how a designated requirement identifies code across versions. An ad-hoc signature is tied to a particular build, so an updated beta may need Accessibility approval again. Headroom does not weaken this identity check or modify permission records.
 
 The installed SDK headers were also checked for table range/sample count, EDR properties, and all-display ColorSync restoration behavior. These references describe API contracts. Actual test results and remaining checks are in [VALIDATION.md](VALIDATION.md).
+
+- [TN3127: Inside Code Signing: Requirements](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements) explains why ad-hoc identities change after rebuilding and why consistent designated requirements preserve privacy permissions. The community build binds both its identifier and exact signing certificate; it does not use an identifier-only requirement.
