@@ -26,6 +26,10 @@ final class BrightnessKeyController {
         let normal: Double
         let mode: BrightnessAdjustmentMode
     }
+    private enum BoundaryArrival {
+        case native(BoostSession, Double)
+        case restoration(BoostSession)
+    }
 
     private let sessions: () -> [BoostSession]
     private let reader: any NormalBrightnessControlling
@@ -38,6 +42,8 @@ final class BrightnessKeyController {
     private var awaitingNative: NativeWrite?
     private var snapshot: Snapshot?
     private var sequence = BrightnessKeySequence()
+    private var boundaryPause = BrightnessBoundaryPause()
+    private var boundaryArrival: BoundaryArrival?
     private var pending: [(BoostSession, BrightnessKeyAction)] = []
     private var generation = 0
     private var flushing = false
@@ -54,6 +60,7 @@ final class BrightnessKeyController {
     private(set) var message = ""
     var permissionRequired: Bool { !trusted }
     var isIdle: Bool { pending.isEmpty && awaitingNative == nil && !flushing }
+    var hudPresentation: BrightnessHUDPresentation? { hud.presentation }
 
     // Dependency injection lets integration tests run this exact controller and
     // real display driver without posting synthetic events to other apps.
@@ -131,6 +138,8 @@ final class BrightnessKeyController {
         awaitingNative = nil
         drainTimer?.invalidate(); drainTimer = nil
         sequence.reset()
+        boundaryPause.reset()
+        boundaryArrival = nil
         snapshot = nil
         hud.hide()
     }
@@ -203,6 +212,12 @@ final class BrightnessKeyController {
         case .stopping: state = .stopping
         case .unavailable: state = .unavailable
         }
+        if case .restoration(let arrivingSession) = boundaryArrival,
+           arrivingSession === session, !session.busy {
+            if state == .off { boundaryPause.reachedBoundary(now: now) }
+            else { boundaryPause.reset() }
+            boundaryArrival = nil
+        }
         if let previous = snapshot, previous.state == .on || previous.state == .preparing,
            !session.enabled, state != .stopping { hud.hide() }
         let ceiling = state == .on && mode == .boost
@@ -218,6 +233,8 @@ final class BrightnessKeyController {
     // Internal for the production-controller integration harness. This does not
     // generate system events or install an event tap without macOS permission.
     func handle(_ event: BrightnessKeyEvent) -> Bool {
+        let pausing = boundaryPause.shouldPause(event: event, now: ProcessInfo.processInfo.systemUptime)
+        if boundaryPause.armedDirection == nil { boundaryArrival = nil }
         if event.phase == .up {
             return sequence.route(event: event, state: .off, factor: 1, ceiling: 1,
                                   normalBrightness: nil, available: false, nativeAvailable: false) != .passthrough
@@ -244,18 +261,30 @@ final class BrightnessKeyController {
                 self.refresh()
             }
         }
-        let action = sequence.route(event: event, state: current.state,
+        // Route through the gesture owner even while paused so the matching
+        // release remains consumed and macOS cannot show a second indicator.
+        let action = sequence.route(event: event, state: pausing ? .stopping : current.state,
             factor: current.factor, ceiling: current.ceiling, normalBrightness: current.normal,
             available: current.available, dimmingAvailable: current.dimmingAvailable,
             mode: current.mode, nativeAvailable: current.nativeAvailable)
         if action == .passthrough { return false }
         switch action {
-        case .setNative(let value): current.normal = value; current.factor = 1
+        case .setNative(let value):
+            if (value == 1 && current.available && current.ceiling > 1.01 && (current.normal ?? 1) < 1)
+                || (value == BrightnessKeyPolicy.hardwareFloor && current.dimmingAvailable
+                    && (current.normal ?? 0) > BrightnessKeyPolicy.hardwareFloor) {
+                boundaryPause.begin(direction: event.direction)
+                boundaryArrival = .native(current.session, value)
+            }
+            current.normal = value; current.factor = 1
         case .start(let factor):
             current.state = .preparing; current.factor = factor
             current.mode = factor < 1 ? .dim : .boost
         case .set(let factor): current.factor = factor
-        case .stop: current.state = .stopping; current.factor = 1
+        case .stop:
+            boundaryPause.begin(direction: event.direction)
+            boundaryArrival = .restoration(current.session)
+            current.state = .stopping; current.factor = 1
         default: break
         }
         snapshot = current
@@ -321,6 +350,11 @@ final class BrightnessKeyController {
                 ? 0.0001 : 0.002
             if let actual, abs(actual - write.value) <= tolerance {
                 awaitingNative = nil
+                if case .native(let session, let value) = boundaryArrival,
+                   session === write.session, value == write.value {
+                    boundaryPause.reachedBoundary(now: ProcessInfo.processInfo.systemUptime)
+                    boundaryArrival = nil
+                }
             } else if ProcessInfo.processInfo.systemUptime >= write.deadline {
                 failNative(write.session, "Hardware brightness did not confirm the requested level")
                 return
@@ -376,17 +410,21 @@ final class BrightnessKeyController {
         guard let current = snapshot, current.session === session, current.nativeAvailable else { return }
         let normal = current.normal ?? 0
         let factor = current.state == .on || current.state == .preparing ? current.factor : 1
+        let nativeBottom = current.dimmingAvailable ? 0.15 : 0
         let nativeTop = current.available && current.ceiling > 1.01 ? 0.85 : 1.0
         let level: Double
         if factor < 1 {
-            level = 0.15 * (factor - session.minimumFactor) / (1 - session.minimumFactor)
+            level = nativeBottom * (factor - session.minimumFactor) / (1 - session.minimumFactor)
         } else if factor > 1 {
             level = nativeTop + (1 - nativeTop) * (factor - 1) / max(0.01, current.ceiling - 1)
         } else if normal <= 0 { level = 0 }
         else {
-            level = 0.15 + (nativeTop - 0.15) * (normal - BrightnessKeyPolicy.hardwareFloor)
+            level = nativeBottom + (nativeTop - nativeBottom) * (normal - BrightnessKeyPolicy.hardwareFloor)
                 / (1 - BrightnessKeyPolicy.hardwareFloor)
         }
-        hud.show(screen: session.screen, level: min(1, max(0, level)))
+        hud.show(screen: session.screen, presentation: BrightnessHUDPresentation(
+            title: factor < 1 ? "Display −" : factor > 1 ? "Display +" : "Display",
+            level: min(1, max(0, level)), lowerBoundary: nativeBottom > 0 ? nativeBottom : nil,
+            upperBoundary: nativeTop < 1 ? nativeTop : nil))
     }
 }

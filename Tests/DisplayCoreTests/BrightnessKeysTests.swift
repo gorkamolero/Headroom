@@ -155,6 +155,32 @@ final class BrightnessKeysTests: XCTestCase {
         XCTAssertEqual(action(event(fine: true), normal: 0.999), .setNative(1))
     }
 
+    func testRoundedNativeReadbacksSnapToExactEndpoints() {
+        // Observed native fine-step readback which previously missed the
+        // controller's exact maximum comparison and skipped its boundary pause.
+        XCTAssertEqual(action(event(fine: true), normal: 0.98437488079), .setNative(1))
+        for fine in [false, true] {
+            let step = fine ? 1.0 / 64 : 1.0 / 16
+            XCTAssertEqual(action(event(fine: fine), normal: 1 - step - 0.00005), .setNative(1))
+            let roundedFloorStep = Double(Float(BrightnessKeyPolicy.hardwareFloor + step))
+            XCTAssertEqual(action(event(.down, fine: fine), normal: roundedFloorStep),
+                           .setNative(BrightnessKeyPolicy.hardwareFloor))
+            XCTAssertEqual(action(event(.down, fine: fine),
+                                  normal: BrightnessKeyPolicy.hardwareFloor + step + 0.00005),
+                           .setNative(BrightnessKeyPolicy.hardwareFloor))
+        }
+    }
+
+    func testNativeValuesOutsideEndpointToleranceKeepTheirStep() {
+        for fine in [false, true] {
+            let step = fine ? 1.0 / 64 : 1.0 / 16
+            let upper = 1 - step - 0.0002
+            let lower = BrightnessKeyPolicy.hardwareFloor + step + 0.0002
+            XCTAssertEqual(action(event(fine: fine), normal: upper), .setNative(upper + step))
+            XCTAssertEqual(action(event(.down, fine: fine), normal: lower), .setNative(lower - step))
+        }
+    }
+
     func testHardwareZeroDownDoesNotRelightButUpDoes() {
         XCTAssertEqual(action(event(.down), normal: 0, dimmingAvailable: true), .consume)
         XCTAssertEqual(action(event(.down, repeated: true), normal: 0, dimmingAvailable: true), .consume)

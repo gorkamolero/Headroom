@@ -1,39 +1,49 @@
 import AppKit
 import SwiftUI
 
+struct BrightnessHUDPresentation {
+    let title: String
+    let level: Double
+    let lowerBoundary: Double?
+    let upperBoundary: Double?
+}
+
 /// A nonactivating display indicator made from Apple's slider and glass controls.
 /// The private legacy OSD service ignores requests on recent macOS versions.
 final class BrightnessHUD {
     private let state = BrightnessHUDState()
     private var panel: BrightnessHUDPanel?
     private var dismissal: Timer?
-    private var presentation = 0
+    private var presentationGeneration = 0
+    private(set) var presentation: BrightnessHUDPresentation?
 
-    func show(screen: NSScreen, level: Double) {
-        guard level.isFinite else { return }
-        present(screen: screen, level: level, duration: 1.5)
+    func show(screen: NSScreen, presentation: BrightnessHUDPresentation) {
+        guard presentation.level.isFinite else { return }
+        present(screen: screen, presentation: presentation, duration: 1.5)
     }
 
     /// Displays the production view without changing brightness or starting a session.
     func showPreview(screen: NSScreen, level: Double, duration: TimeInterval = 30) {
         guard level.isFinite, duration.isFinite else { return }
-        present(screen: screen, level: level, duration: max(0.1, duration))
+        present(screen: screen, presentation: BrightnessHUDPresentation(title: "Display", level: level,
+            lowerBoundary: 0.15, upperBoundary: 0.85), duration: max(0.1, duration))
     }
 
     func hide() {
-        presentation += 1
+        presentationGeneration += 1
         dismissal?.invalidate()
         dismissal = nil
         panel?.orderOut(nil)
     }
 
-    private func present(screen: NSScreen, level: Double, duration: TimeInterval) {
+    private func present(screen: NSScreen, presentation: BrightnessHUDPresentation, duration: TimeInterval) {
         if panel == nil { makePanel() }
         guard let panel else { return }
-        presentation += 1
-        let currentPresentation = presentation
+        presentationGeneration += 1
+        let currentPresentation = presentationGeneration
         dismissal?.invalidate()
-        state.level = min(1, max(0, level))
+        self.presentation = presentation
+        state.presentation = presentation
         let visible = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(x: visible.maxX - panel.frame.width - 4,
                                      y: visible.maxY - panel.frame.height - 2))
@@ -43,13 +53,13 @@ final class BrightnessHUD {
         }
         panel.orderFrontRegardless()
         let timer = Timer(timeInterval: duration, repeats: false) { [weak self] _ in
-            guard let self, self.presentation == currentPresentation else { return }
+            guard let self, self.presentationGeneration == currentPresentation else { return }
             self.dismissal = nil
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18
                 panel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
-                guard let self, self.presentation == currentPresentation else { return }
+                guard let self, self.presentationGeneration == currentPresentation else { return }
                 panel.orderOut(nil)
             }
         }
@@ -110,7 +120,8 @@ private final class BrightnessHUDPanel: NSPanel {
 }
 
 private final class BrightnessHUDState: ObservableObject {
-    @Published var level = 0.0
+    @Published var presentation = BrightnessHUDPresentation(title: "Display", level: 0,
+        lowerBoundary: nil, upperBoundary: nil)
 }
 
 private struct BrightnessHUDContent: View {
@@ -119,7 +130,7 @@ private struct BrightnessHUDContent: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Text("Display +")
+            Text(state.presentation.title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 130, alignment: .leading)
@@ -132,8 +143,20 @@ private struct BrightnessHUDContent: View {
                 .tint(.white)
                 .controlSize(.small)
                 .frame(width: 225, height: 22)
+                .overlay(alignment: .topLeading) {
+                    // Subtle notches project three points above and below the
+                    // four-point native track, marking the two range detents.
+                    ForEach([state.presentation.lowerBoundary, state.presentation.upperBoundary]
+                        .compactMap { $0 }.filter { $0 > 0 && $0 < 1 }, id: \.self) { boundary in
+                        Capsule()
+                            .fill(.white.opacity(0.6))
+                            .frame(width: 1, height: 10)
+                            .position(x: 225 * boundary, y: 10)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .position(x: 143.5, y: 41)
-                .accessibilityLabel("Display + brightness")
+                .accessibilityLabel("\(state.presentation.title) brightness")
             Image(systemName: "sun.max.fill")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(.white)
@@ -147,14 +170,14 @@ private struct BrightnessHUDContent: View {
 
     @ViewBuilder private var slider: some View {
         if #available(macOS 26, *) {
-            Slider(value: .constant(state.level)) {} ticks: {
+            Slider(value: .constant(min(1, max(0, state.presentation.level)))) {} ticks: {
                 SliderTickContentForEach(ticks, id: \.self) { value in
                     SliderTick(value)
                 }
             }
             .sliderThumbVisibility(.hidden)
         } else {
-            Slider(value: .constant(state.level), in: 0...1)
+            Slider(value: .constant(min(1, max(0, state.presentation.level))), in: 0...1)
         }
     }
 }

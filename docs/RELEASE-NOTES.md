@@ -1,4 +1,6 @@
-# Headroom 0.5.0 — local candidate, build 13
+# Headroom 0.5.0 — local candidate, build 14
+
+- The indicator now says **Display −**, **Display**, or **Display +** for extra dimming, normal brightness, and boost. Small vertical notches mark the two boundaries. Held keys pause for 350 ms at a confirmed boundary, then continue; release/repress or reversing direction skips the pause.
 
 - Removed the fixed 1.5-second boost startup delay. Activation now proceeds as soon as the HDR frame and current display headroom are ready. Timed Up-repeat tests check actual display-table changes before release, including a 750 ms hold. Normal brightness and Down handling are unchanged.
 
@@ -6,7 +8,7 @@
 - Holding Down lowers hardware brightness to a 1% slider setting, then enters extra software dimming without lowering the backlight further. If hardware brightness is already zero, Up raises it and Down leaves it off. The hardware percentage is not a physical luminance measurement.
 - Holding Down reduces boost; holding Up reduces extra dimming. Reaching the unchanged baseline restores the saved tables before the held key resumes normal hardware changes. Hold Option–Shift for fine adjustments.
 - Per-display sliders cover table factors from 0.1 to the available boost ceiling, at most 2.0. Extra dimming uses the saved original tables without an HDR carrier; these factors are not measured luminance ratios.
-- One native-style **Display +** overlay across all supported ranges, built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older systems. White bar, tick marks, and sun icons; automatic fade and no percentage or multiplier label.
+- One native-style overlay across all supported ranges, built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older systems. White bar, tick marks, and sun icons; automatic fade and no percentage or multiplier label.
 - Accessibility is requested only for key control. Keys target the built-in display, or the primary display on a desktop Mac, and pause while Lunar is running.
 - Handles both system-defined brightness events and alternate brightness keycodes 144/145, including held keys and releases. Ordinary keys pass through unchanged.
 - One isolated private adapter reads and sets native brightness with DisplayServices, validates levels, and checks write/readback results. It does not change automatic brightness. If native control is unavailable, ordinary keys fall back to macOS. The overlay uses public controls because the tested system-banner interfaces are unavailable to Headroom.

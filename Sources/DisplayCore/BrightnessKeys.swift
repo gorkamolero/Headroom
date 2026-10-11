@@ -142,7 +142,12 @@ public enum BrightnessKeyPolicy {
             let normal = min(1, normalBrightness)
             switch event.direction {
             case .up:
-                if normal < 1 - endpointTolerance { return .setNative(min(1, normal + step)) }
+                if normal < 1 - endpointTolerance {
+                    let next = min(1, normal + step)
+                    // Hardware readbacks use Float precision. Exact endpoints
+                    // let the controller recognize arrival and arm its detent.
+                    return .setNative(next >= 1 - endpointTolerance ? 1 : next)
+                }
                 if state == .off, canStart(mode: .boost, normalBrightness: normal,
                                           available: available, ceiling: ceiling) {
                     return .start(min(1 + step, ceiling))
@@ -150,7 +155,8 @@ public enum BrightnessKeyPolicy {
                 return .consume
             case .down:
                 if normal > hardwareFloor + endpointTolerance {
-                    return .setNative(max(hardwareFloor, normal - step))
+                    let next = max(hardwareFloor, normal - step)
+                    return .setNative(next <= hardwareFloor + endpointTolerance ? hardwareFloor : next)
                 }
                 if state == .off, canStart(mode: .dim, normalBrightness: normal,
                                           available: dimmingAvailable, ceiling: ceiling) {

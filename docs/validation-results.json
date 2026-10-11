@@ -596,5 +596,98 @@
     "runningGuiBrightnessTapEnabled": true,
     "priorSelectedBoostRestored": true,
     "installedApplicationPathVerified": true
+  },
+  "candidate050Build14": {
+    "scope": "Installed local candidate; normalized key replay drives actual native brightness, gamma, guardian and HUD. Physical media-key delivery is not synthesized.",
+    "automatedTestsPassed": 88,
+    "boundaryPauseSeconds": 0.35,
+    "hudTitles": [
+      "Display −",
+      "Display",
+      "Display +"
+    ],
+    "boundaryMarkers": "Two one-point wide, ten-point high notches extending above and below the native track.",
+    "boundaryChecks": [
+      {
+        "finalTitle": "Display +",
+        "labelPassed": true,
+        "labelsSeen": [
+          "Display",
+          "Display +"
+        ],
+        "longestHandlerSeconds": 2.7375004719942808e-05,
+        "markersPassed": true,
+        "measuredPauseSeconds": 0.46044558333233,
+        "name": "boundary-native-to-boost-boundary-assertions",
+        "pausePassed": true,
+        "repeatEventsDuringPause": 14
+      },
+      {
+        "finalTitle": "Display −",
+        "labelPassed": true,
+        "labelsSeen": [
+          "Display",
+          "Display +",
+          "Display −"
+        ],
+        "longestHandlerSeconds": 2.745829988270998e-05,
+        "markersPassed": true,
+        "measuredPauseSeconds": 0.4396649583359249,
+        "name": "boundary-native-to-dim-boundary-assertions",
+        "pausePassed": true,
+        "repeatEventsDuringPause": 13
+      },
+      {
+        "finalTitle": "Display",
+        "labelPassed": true,
+        "labelsSeen": [
+          "Display",
+          "Display −"
+        ],
+        "longestHandlerSeconds": 1.9249971956014633e-05,
+        "markersPassed": true,
+        "measuredPauseSeconds": 0.3600468750228174,
+        "name": "boundary-dim-to-native-boundary-assertions",
+        "pausePassed": true,
+        "repeatEventsDuringPause": 11
+      },
+      {
+        "finalTitle": "Display",
+        "labelPassed": true,
+        "labelsSeen": [
+          "Display"
+        ],
+        "longestHandlerSeconds": 2.9791670385748148e-05,
+        "markersPassed": true,
+        "measuredPauseSeconds": 0.359646791650448,
+        "name": "boundary-boost-to-native-boundary-assertions",
+        "pausePassed": true,
+        "repeatEventsDuringPause": 11
+      },
+      {
+        "name": "boundary-fresh-press-bypass",
+        "startDelay": 0.014217208372429013
+      },
+      {
+        "name": "boundary-direction-reversal-bypass",
+        "nativeDelay": 0.010836749977897853
+      }
+    ],
+    "managedEventsConsumed": 759,
+    "allManagedEventsConsumed": true,
+    "harnessPassed": true,
+    "restoration": {
+      "passed": true,
+      "restored": true,
+      "nativeRestorationDifference": 0,
+      "gammaRestorationMaximumDifference": 0,
+      "remainingJournals": 0
+    },
+    "nativeEndpointRoundingRegression": "Initial live test caught Float-rounded endpoint skipping detent; policy now snaps within existing 0.0001 endpoint tolerance. Focused regression tests and second full live run passed.",
+    "previewVisuallyInspected": true,
+    "releaseBuildAndDeepStrictSignaturePassed": true,
+    "installedBuild": 14,
+    "runningKeyTapEnabled": false,
+    "permissionRefresh": "Awaiting the user at the macOS Touch ID prompt."
   }
 }

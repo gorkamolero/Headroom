@@ -170,14 +170,17 @@ private final class Trial {
         try wait("key queue to drain") { controller.isIdle }
     }
 
-    func hold(_ direction: BrightnessDirection, maxEvents: Int = 40, until condition: () -> Bool) throws {
-        for index in 0..<maxEvents {
-            try emit(direction, repeat: index > 0)
+    func hold(_ direction: BrightnessDirection, timeout: TimeInterval = 8, until condition: () -> Bool) throws {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        var count = 0
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            try emit(direction, repeat: count > 0)
+            count += 1
             try wait("native write/action queue", timeout: 3) { controller.isIdle }
             if condition() { try release(direction); return }
             pump(0.025)
         }
-        throw DisplayError.invalid("Held \(direction) did not reach expected state after \(maxEvents) events.")
+        throw DisplayError.invalid("Held \(direction) did not reach expected state within \(timeout) seconds (\(count) events).")
     }
 
     func record(_ name: String) throws {
@@ -203,7 +206,8 @@ private final class Trial {
     /// timers. Never wait for isIdle between repeats; progress is measured before
     /// key-up so a change that appears only after release cannot pass.
     func timedHold(_ name: String, duration: TimeInterval, fine: Bool,
-                   requiresNativeProgress: Bool, requiresGammaProgress: Bool) throws -> Bool {
+                   requiresNativeProgress: Bool, requiresGammaProgress: Bool,
+                   direction: BrightnessDirection = .up, sampleInterval: TimeInterval = 0.05) throws -> Bool {
         let start = ProcessInfo.processInfo.systemUptime
         let initialNative = nativeValue
         let initialGamma = try GammaTable.read(display: baseline.identity.displayID)
@@ -216,14 +220,16 @@ private final class Trial {
 
         func sendHeldDown() {
             let now = ProcessInfo.processInfo.systemUptime
-            let consumed = controller.handle(BrightnessKeyEvent(direction: .up, phase: .down,
+            let consumed = controller.handle(BrightnessKeyEvent(direction: direction, phase: .down,
                                                                 isRepeat: inputCount > 0, fine: fine))
-            events.append(["time": now, "trial": name, "direction": "up", "phase": "down",
+            let handlerDuration = ProcessInfo.processInfo.systemUptime - now
+            events.append(["time": now, "trial": name, "direction": direction == .up ? "up" : "down", "phase": "down",
+                           "handlerDuration": handlerDuration,
                            "repeat": inputCount > 0, "fine": fine, "consumed": consumed,
                            "native": nativeValue, "factor": session.desiredFactor,
                            "session": String(describing: session.state)])
             inputCount += 1
-            if !consumed { timerFailure = DisplayError.invalid("Timed held-Up event passed through in \(name).") }
+            if !consumed { timerFailure = DisplayError.invalid("Timed held-key event passed through in \(name).") }
         }
         func sample() {
             do {
@@ -231,10 +237,15 @@ private final class Trial {
                 let gamma = try GammaTable.read(display: baseline.identity.displayID)
                 let currentNative = nativeValue
                 let gammaDifference = gamma.maxDifference(from: initialGamma)
-                if firstNativeChange == nil, currentNative > initialNative + 0.002 { firstNativeChange = now }
+                if firstNativeChange == nil, abs(currentNative - initialNative) > 0.002 { firstNativeChange = now }
                 if firstGammaChange == nil, gammaDifference > 0.0005 { firstGammaChange = now }
                 if firstOn == nil, session.state == .on { firstOn = now }
+                let presentation = controller.hudPresentation
                 samples.append(["time": now, "sinceStart": now - start, "keyStillHeld": true,
+                                "hudTitle": presentation?.title as Any? ?? NSNull(),
+                                "hudLevel": presentation?.level as Any? ?? NSNull(),
+                                "lowerBoundary": presentation?.lowerBoundary as Any? ?? NSNull(),
+                                "upperBoundary": presentation?.upperBoundary as Any? ?? NSNull(),
                                 "native": currentNative, "gammaDifferenceFromHoldStart": gammaDifference,
                                 "gammaMaximum": gamma.maximum, "factor": session.desiredFactor,
                                 "session": String(describing: session.state), "queueIdle": controller.isIdle,
@@ -246,7 +257,7 @@ private final class Trial {
         sample()
         sendHeldDown()
         let inputTimer = Timer(timeInterval: 1.0 / 30, repeats: true) { _ in sendHeldDown() }
-        let sampleTimer = Timer(timeInterval: 0.05, repeats: true) { _ in sample() }
+        let sampleTimer = Timer(timeInterval: sampleInterval, repeats: true) { _ in sample() }
         RunLoop.main.add(inputTimer, forMode: .common)
         RunLoop.main.add(sampleTimer, forMode: .common)
         while ProcessInfo.processInfo.systemUptime < start + duration && timerFailure == nil { pump(0.01) }
@@ -258,8 +269,8 @@ private final class Trial {
         let stateBeforeKeyUp = String(describing: session.state)
         let factorBeforeKeyUp = session.desiredFactor
         let keyUpAt = ProcessInfo.processInfo.systemUptime
-        let releaseConsumed = controller.handle(BrightnessKeyEvent(direction: .up, phase: .up, fine: fine))
-        events.append(["time": keyUpAt, "trial": name, "direction": "up", "phase": "up",
+        let releaseConsumed = controller.handle(BrightnessKeyEvent(direction: direction, phase: .up, fine: fine))
+        events.append(["time": keyUpAt, "trial": name, "direction": direction == .up ? "up" : "down", "phase": "up",
                        "repeat": false, "fine": fine, "consumed": releaseConsumed,
                        "native": nativeBeforeKeyUp, "factor": factorBeforeKeyUp,
                        "session": stateBeforeKeyUp])
@@ -288,6 +299,54 @@ private final class Trial {
         print("TIMED HOLD \(name): passed=\(passed), inputCount=\(inputCount), nativeBeforeKeyUp=\(nativeBeforeKeyUp), stateBeforeKeyUp=\(stateBeforeKeyUp)")
         fflush(stdout)
         return passed
+    }
+
+    func boundaryHold(_ name: String, direction: BrightnessDirection, enteringSoftware: Bool,
+                      nativeEndpoint: Double, finalTitle: String) throws {
+        let passed = try timedHold(name, duration: 1.05, fine: true,
+                                   requiresNativeProgress: !enteringSoftware,
+                                   requiresGammaProgress: enteringSoftware,
+                                   direction: direction, sampleInterval: 0.02)
+        guard let result = checks.last,
+              let samples = result["samplesBeforeRelease"] as? [[String: Any]] else {
+            throw DisplayError.invalid("Boundary hold did not return samples.")
+        }
+        let firstBoundaryTime: Double?
+        let nextRangeTime: Double?
+        if enteringSoftware {
+            firstBoundaryTime = samples.first(where: {
+                guard let value = $0["native"] as? Double else { return false }
+                return abs(value - nativeEndpoint) <= 0.0001
+            })?["time"] as? Double
+            nextRangeTime = result["firstGammaChangeAt"] as? Double
+        } else {
+            firstBoundaryTime = result["firstGammaChangeAt"] as? Double
+            nextRangeTime = result["firstNativeChangeAt"] as? Double
+        }
+        let trialEvents = events.filter { $0["trial"] as? String == name && $0["phase"] as? String == "down" }
+        let repeatCount = trialEvents.filter {
+            guard let time = $0["time"] as? Double, let from = firstBoundaryTime, let to = nextRangeTime else { return false }
+            return $0["repeat"] as? Bool == true && time >= from && time < to
+        }.count
+        let longestHandler = trialEvents.compactMap { $0["handlerDuration"] as? Double }.max() ?? .infinity
+        let measuredPause = firstBoundaryTime.flatMap { from in nextRangeTime.map { $0 - from } }
+        let finalPresentation = controller.hudPresentation
+        // The 350ms pure gate has exact clock tests. Actual display sampling
+        // resolves the plateau to 20 ms, with scheduling/readback tolerance.
+        let pausePassed = measuredPause.map { $0 >= 0.30 } == true
+        let labels = Set(samples.compactMap { $0["hudTitle"] as? String })
+        let expectedUpper: Double? = session.supportsBoost ? 0.85 : nil
+        let markersPassed = finalPresentation?.lowerBoundary == 0.15
+            && finalPresentation?.upperBoundary == expectedUpper
+        let labelPassed = labels.contains("Display") && finalPresentation?.title == finalTitle
+        checks.append(["name": name + "-boundary-assertions", "pausePassed": pausePassed,
+                       "measuredPauseSeconds": measuredPause as Any? ?? NSNull(),
+                       "repeatEventsDuringPause": repeatCount, "longestHandlerSeconds": longestHandler,
+                       "labelsSeen": labels.sorted(), "finalTitle": finalPresentation?.title as Any? ?? NSNull(),
+                       "markersPassed": markersPassed, "labelPassed": labelPassed])
+        try require(passed && pausePassed, "Held boundary did not preserve the expected pause before continuing: \(name).")
+        try require(repeatCount >= 5 && longestHandler < 0.1, "Boundary pause blocked or starved repeated input: \(name).")
+        try require(labelPassed && markersPassed, "Boundary HUD title or markers were incorrect: \(name).")
     }
 
     func restoreTablesForNextCase() throws {
@@ -369,6 +428,59 @@ private final class Trial {
             }
             try require(timedHoldFailures.isEmpty,
                         "Held Up had no required real display progress before key-up: \(timedHoldFailures.joined(separator: ", ")).")
+
+            if session.supportsBoost {
+                try setStartingNative(1 - 1.0 / 64)
+                try boundaryHold("boundary-native-to-boost", direction: .up, enteringSoftware: true,
+                                 nativeEndpoint: 1, finalTitle: "Display +")
+                try restoreTablesForNextCase()
+            }
+            try setStartingNative(0.01 + 1.0 / 64)
+            try boundaryHold("boundary-native-to-dim", direction: .down, enteringSoftware: true,
+                             nativeEndpoint: 0.01, finalTitle: "Display −")
+            try restoreTablesForNextCase()
+
+            try setStartingNative(0.01)
+            session.setLevel(1 - 1.0 / 64)
+            session.start()
+            try wait("manual dim for boundary return") { session.state == .on }
+            pump(0.1)
+            try boundaryHold("boundary-dim-to-native", direction: .up, enteringSoftware: false,
+                             nativeEndpoint: 0.01, finalTitle: "Display")
+            try restoreTablesForNextCase()
+            if session.supportsBoost {
+                try setStartingNative(1)
+                session.setLevel(1 + 1.0 / 64)
+                session.start()
+                try wait("manual boost for boundary return", timeout: 12) { session.state == .on }
+                pump(0.1)
+                try boundaryHold("boundary-boost-to-native", direction: .down, enteringSoftware: false,
+                                 nativeEndpoint: 1, finalTitle: "Display")
+                try restoreTablesForNextCase()
+
+                // A release followed by a new press crosses immediately; only
+                // a continuous same-direction hold gets the deliberate pause.
+                try setStartingNative(1 - 1.0 / 64)
+                try emit(.up, fine: true)
+                try wait("native ceiling for fresh-press bypass") { controller.isIdle && nativeValue >= 0.9999 }
+                try release(.up)
+                let freshPressAt = ProcessInfo.processInfo.systemUptime
+                try emit(.up, fine: true)
+                try wait("fresh press bypassing boundary pause", timeout: 0.25) { session.busy }
+                checks.append(["name": "boundary-fresh-press-bypass", "startDelay": ProcessInfo.processInfo.systemUptime - freshPressAt])
+                try release(.up)
+                try restoreTablesForNextCase()
+
+                try setStartingNative(1 - 1.0 / 64)
+                try emit(.up, fine: true)
+                try wait("native ceiling for reversal bypass") { controller.isIdle && nativeValue >= 0.9999 }
+                let reverseAt = ProcessInfo.processInfo.systemUptime
+                try emit(.down, fine: true)
+                try wait("reverse direction bypassing boundary pause", timeout: 0.25) { nativeValue < 0.99 }
+                checks.append(["name": "boundary-direction-reversal-bypass", "nativeDelay": ProcessInfo.processInfo.systemUptime - reverseAt])
+                try release(.down)
+                try release(.up)
+            }
 
             try setStartingNative(0.5)
             // Queue repeat events quickly, then release. Real queued writes must
