@@ -1,8 +1,8 @@
-# Headroom 0.5.0 — local candidate, build 10
+# Headroom 0.5.0 — local candidate, build 11
 
-- Automatic brightness-key handling while Headroom runs. Accessibility permission is requested once on first use; later launches report missing access in the menu without repeating the prompt. Release and press Up at normal maximum to enter boost, or Down at the lowest lit step to enter extra dimming. A held native key requires release before entering either extra range.
-- Extra dimming leaves hardware brightness unchanged. A held Down stops at the lowest lit step; if hardware brightness is already zero, Up remains with macOS to light it again.
-- Down reduces boost; Up reduces extra dimming. Reaching the unchanged baseline restores the saved tables and returns control to macOS. Hold Option–Shift for fine adjustments.
+- Automatic brightness-key handling while Headroom runs. Accessibility permission is requested once on first use; later launches report missing access in the menu without repeating the prompt. Hold Up through normal maximum into boost, or Down through the lowest lit step into extra dimming. No release or second press is needed at either boundary.
+- Extra dimming leaves hardware brightness at the lowest lit step. If hardware brightness is already zero, Up remains with macOS to light it again.
+- Holding Down reduces boost; holding Up reduces extra dimming. Reaching the unchanged baseline restores the saved tables before the held key continues through macOS's normal range. Hold Option–Shift for fine adjustments.
 - Per-display sliders cover table factors from 0.1 to the available boost ceiling, at most 2.0. Extra dimming uses the saved original tables without an HDR carrier; these factors are not measured luminance ratios.
 - A native-style **Display +** overlay built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older systems. White bar, tick marks, and sun icons; automatic fade and no percentage or multiplier label.
 - Accessibility is requested only for key control. Keys target the built-in display, or the primary display on a desktop Mac, and pause while Lunar is running.

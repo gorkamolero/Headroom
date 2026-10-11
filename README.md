@@ -34,12 +34,12 @@ The app currently targets **Apple Silicon and macOS 13 or later**. Live testing 
 
 ### Next beta: brightness keys and extra dimming
 
-The local 0.5.0 candidate (build 10) handles brightness keys automatically while running. This is not included in the public 0.4.0 download. On first use, Headroom requests Accessibility permission; allow it in **System Settings → Privacy & Security → Accessibility**. The menu reports when permission is needed. Once allowed:
+The local 0.5.0 candidate (build 11) handles brightness keys automatically while running. This is not included in the public 0.4.0 download. On first use, Headroom requests Accessibility permission; allow it in **System Settings → Privacy & Security → Accessibility**. The menu reports when permission is needed. Once allowed:
 
-- **Brighter:** macOS handles normal brightness. At maximum, release the key and press Up again to enter boost.
-- **Dimmer:** at the lowest lit brightness step, release the key and press Down again to enter extra software dimming. Headroom leaves the backlight at that setting. Up reduces the dimming and restores the saved color tables before returning control to macOS.
-- **Back from boost:** Down reduces boost and restores the saved color tables before returning to macOS's normal range.
-- Holding a native brightness key never crosses into either extra range without a release and a fresh press. A held Down key stops at the lowest lit step; if the backlight is already at zero, Up remains with macOS to light it again.
+- **Brighter:** hold Up through the normal brightness range and into boost at maximum.
+- **Dimmer:** hold Down through the normal range and into extra software dimming at the lowest lit step. Headroom leaves the backlight at that setting. Holding Up reverses the dimming, restores the saved color tables, and continues through macOS's normal range.
+- **Back from boost:** holding Down reduces boost, restores the saved color tables, and continues through macOS's normal range.
+- No release or second press is needed at either boundary. If the backlight is already at zero, Up remains with macOS to light it again.
 - **Smaller steps:** hold **Option + Shift** while pressing a brightness key.
 
 Extra bright and dim adjustments use a compact **Display +** overlay built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older versions. It follows the native style with a white bar, tick marks, and sun icons, then fades after the key press. The bar represents a control position, not measured nits; no percentage or multiplier label is added. Ordinary brightness keys remain under macOS control.

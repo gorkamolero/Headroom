@@ -24,9 +24,9 @@ There is no universal “reset everything” action in normal recovery. Resettin
 
 Keyboard control is a development feature, not part of the 0.4.0 download. It starts automatically with Headroom. The app requests Accessibility permission once on first use; allow Headroom under **System Settings → Privacy & Security → Accessibility**. The menu reports when permission is missing. Its switches and sliders remain usable without this permission; Screen Recording is not needed.
 
-macOS handles the normal brightness range. At maximum, release Up and press it again to enter boost. At the lowest lit step, release Down and press it again to enter extra dimming. Headroom leaves hardware brightness unchanged. A held Down stops at that lit floor until released; a held Up does not cross into boost. If hardware brightness is already zero, press Up to let macOS light the display again before using extra dimming.
+macOS handles the normal brightness range. Keep holding Up to enter boost at maximum, or Down to enter extra dimming at the lowest lit step. No release or second press is needed. Extra dimming leaves hardware brightness at that lit setting. If hardware brightness is already zero, Up lets macOS light the display again before using extra dimming.
 
-Down reduces boost; Up reduces extra dimming. At the unchanged baseline, Headroom restores the original tables before returning control to macOS. Holding Option + Shift gives smaller steps.
+Holding Down reduces boost; holding Up reduces extra dimming. At the unchanged baseline, Headroom restores the original tables before the held key continues through macOS's normal range. Holding Option + Shift gives smaller steps.
 
 The **Display +** overlay has a bar, tick marks, and sun icons, with no percentage or multiplier label. Its bar is a control position, not a brightness measurement. The candidate's menu slider can dim the saved tables to a factor of 0.1 without starting the HDR carrier; this does not mean 10% of physical brightness. Switching the display off restores its original tables from either extra range.
 

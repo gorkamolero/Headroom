@@ -112,9 +112,8 @@ public enum BrightnessKeyPolicy {
 
         switch state {
         case .off:
-            // A held native key must not cross either hardware endpoint. A new
-            // press at the confirmed endpoint opts into the extra range.
-            guard !event.isRepeat else { return .passthrough }
+            // Continue a held brightness key through a confirmed hardware
+            // endpoint into the extra range without requiring another press.
             let requestedMode: BrightnessAdjustmentMode = event.direction == .up ? .boost : .dim
             guard canStart(mode: requestedMode, normalBrightness: normalBrightness,
                            available: requestedMode == .dim ? dimmingAvailable : available,
@@ -150,24 +149,24 @@ public enum BrightnessKeyPolicy {
     }
 }
 
-/// Keeps a held key with the handler that accepted its initial press. After
-/// restoration, Down from boost or Up from dimming returns to macOS on the next
-/// repeat, without posting synthetic events.
+/// Routes continuous held-key movement across native, dimming, and boost
+/// ranges. macOS must receive the release whenever it received an earlier Down,
+/// even when Headroom subsequently captured repeats at a hardware endpoint.
 public struct BrightnessKeySequence: Sendable {
     private var consumedDirections: Set<BrightnessDirection> = []
+    private var nativeDirections: Set<BrightnessDirection> = []
     private var nativeHandoffDirections: Set<BrightnessDirection> = []
-    private var nativeDownHeldAtFloor = false
-
-    public func holdsNativeDownRepeat(_ event: BrightnessKeyEvent) -> Bool {
-        nativeDownHeldAtFloor && event.direction == .down && event.phase == .down && event.isRepeat
-    }
+    private var deferredDirections: Set<BrightnessDirection> = []
+    private var releasedDirections: Set<BrightnessDirection> = []
 
     public init() {}
 
     public mutating func reset() {
         consumedDirections.removeAll()
+        nativeDirections.removeAll()
         nativeHandoffDirections.removeAll()
-        nativeDownHeldAtFloor = false
+        deferredDirections.removeAll()
+        releasedDirections.removeAll()
     }
 
     public mutating func route(
@@ -181,31 +180,49 @@ public struct BrightnessKeySequence: Sendable {
         mode: BrightnessAdjustmentMode? = nil,
         nativeDownReadPending: Bool = false
     ) -> BrightnessKeyAction {
-        let owned = consumedDirections.contains(event.direction)
         if event.phase == .up {
-            if event.direction == .down { nativeDownHeldAtFloor = false }
+            let releaseIsOurs = consumedDirections.contains(event.direction)
+                && !nativeDirections.contains(event.direction)
             consumedDirections.remove(event.direction)
+            nativeDirections.remove(event.direction)
             nativeHandoffDirections.remove(event.direction)
-            return owned ? .consume : .passthrough
+            deferredDirections.remove(event.direction)
+            releasedDirections.insert(event.direction)
+            return releaseIsOurs ? .consume : .passthrough
         }
-        if holdsNativeDownRepeat(event) { return .consume }
+        if !event.isRepeat {
+            consumedDirections.remove(event.direction)
+            nativeDirections.remove(event.direction)
+            nativeHandoffDirections.remove(event.direction)
+            deferredDirections.remove(event.direction)
+            releasedDirections.remove(event.direction)
+        } else if releasedDirections.contains(event.direction) {
+            // A queued repeat after release must not restart an adjustment.
+            return .passthrough
+        }
+        let owned = consumedDirections.contains(event.direction)
+        if event.isRepeat, !owned {
+            // Monitoring can begin in the middle of a native key sequence.
+            nativeDirections.insert(event.direction)
+        }
         if event.direction == .down, nativeDownReadPending, !event.hasUnsupportedModifiers {
-            // A paused native repeat still needs its key-up delivered to macOS.
-            // A fresh press intercepted while a read settles belongs to us.
             if !event.isRepeat {
                 consumedDirections.insert(.down)
-                nativeHandoffDirections.remove(.down)
+                deferredDirections.insert(.down)
             }
             return .consume
         }
-        if event.direction == .down, event.isRepeat, !owned, state == .off,
-           !event.hasUnsupportedModifiers,
-           BrightnessKeyPolicy.canStart(mode: .dim, normalBrightness: normalBrightness,
-                                        available: dimmingAvailable, ceiling: ceiling) {
-            nativeDownHeldAtFloor = true
+        if owned, state == .off, event.isRepeat, !deferredDirections.contains(event.direction) {
+            // Resume native movement only after the corresponding restoration.
+            // An unexpected stop must not silently restart the same session.
+            if !event.hasUnsupportedModifiers, nativeHandoffDirections.contains(event.direction) {
+                consumedDirections.remove(event.direction)
+                nativeHandoffDirections.remove(event.direction)
+                nativeDirections.insert(event.direction)
+                return .passthrough
+            }
             return .consume
         }
-        guard !event.isRepeat || owned else { return .passthrough }
 
         let activeMode = mode ?? (factor < 1 ? .dim : .boost)
         let action = BrightnessKeyPolicy.action(
@@ -214,16 +231,13 @@ public struct BrightnessKeySequence: Sendable {
             dimmingAvailable: dimmingAvailable, mode: activeMode
         )
         if action == .passthrough {
-            guard owned else { return .passthrough }
-            if state == .off, event.isRepeat, !event.hasUnsupportedModifiers,
-               nativeHandoffDirections.contains(event.direction) {
-                consumedDirections.remove(event.direction)
-                nativeHandoffDirections.remove(event.direction)
-                return .passthrough
-            }
-            return .consume
+            if owned, !deferredDirections.contains(event.direction) { return .consume }
+            consumedDirections.remove(event.direction)
+            deferredDirections.remove(event.direction)
+            nativeDirections.insert(event.direction)
+            return .passthrough
         }
-
+        deferredDirections.remove(event.direction)
         if state == .on || state == .preparing {
             if event.direction == activeMode.nativeHandoffDirection {
                 nativeHandoffDirections.insert(event.direction)

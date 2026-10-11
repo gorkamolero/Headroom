@@ -107,6 +107,7 @@ final class BrightnessKeyController {
     }
 
     func shutdown() {
+        suspended = true
         timer?.invalidate(); timer = nil
         tap.stop(); tapRunning = false
         cancelPending()
@@ -185,6 +186,9 @@ final class BrightnessKeyController {
             } else {
                 nativeDownRead = nil
             }
+            if nativeDownRead == nil {
+                nativeDownReadTimer?.invalidate(); nativeDownReadTimer = nil
+            }
         }
         let mode: BrightnessAdjustmentMode = session.isDimming ? .dim : .boost
         if let ownership = keyOwned[session.uuid], session.enabled {
@@ -226,7 +230,7 @@ final class BrightnessKeyController {
                                   normalBrightness: nil, available: false) != .passthrough
         }
         if !suspended, trusted, !conflict,
-           sequence.holdsNativeDownRepeat(event) || (event.direction == .down && nativeDownRead != nil) {
+           event.direction == .down && nativeDownRead != nil {
             return sequence.route(event: event, state: .off, factor: 1, ceiling: 1,
                 normalBrightness: nil, available: false,
                 nativeDownReadPending: nativeDownRead != nil) != .passthrough
@@ -256,8 +260,7 @@ final class BrightnessKeyController {
                 let now = ProcessInfo.processInfo.systemUptime
                 nativeDownRead = (current.session.uuid, normal, now + 0.03, now + 0.35)
                 nativeDownReadTimer?.invalidate()
-                let timer = Timer(timeInterval: 0.035, repeats: false) { [weak self] _ in
-                    self?.nativeDownReadTimer = nil
+                let timer = Timer(timeInterval: 0.035, repeats: true) { [weak self] _ in
                     self?.refresh()
                 }
                 nativeDownReadTimer = timer
