@@ -35,12 +35,12 @@ enum LuminanceHUDCheck {
                     lowerBoundary: 0.125, upperBoundary: 0.875,
                     luminance: DisplayLuminance(referenceNits: reference, appliedFactor: appliedFactor,
                         boostActive: boostActive, boostContext: .init(currentHeadroom: headroom,
-                            maximumHDRNits: 1600, maximumFactor: 2))),
+                            maximumHDRNits: 1600))),
                     readLuminance: {
                         reads += 1
                         return DisplayLuminance(referenceNits: reference, appliedFactor: appliedFactor,
                             boostActive: boostActive, boostContext: .init(currentHeadroom: headroom,
-                                maximumHDRNits: 1600, maximumFactor: 2))
+                                maximumHDRNits: 1600))
                     })
             }
             show()
@@ -72,16 +72,18 @@ enum LuminanceHUDCheck {
                 show()
             }
             after(1.4) {
-                checks["boostReadoutUpdates"] = hud.presentation?.luminance.text == "≈800 nits"
+                checks["boostCapacityNotCurrentNits"] = hud.presentation?.luminance.text == "HDR ≤1201 nits"
+                    && hud.presentation?.luminance.nits == nil
+                checks["capacityLabelFitsExistingHUD"] = ("HDR ≤1600 nits" as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)]).width <= 124
                 checks["boostLabel"] = hud.presentation?.title == "Display +"
                 headroom = 2
             }
             after(1.65) {
-                checks["fallingHeadroomUpdatesWithoutKeyEvent"] = hud.presentation?.luminance.text == "≈600 nits"
+                checks["fallingHeadroomUpdatesWithoutKeyEvent"] = hud.presentation?.luminance.text == "HDR ≤800 nits"
                 headroom = 1
             }
             after(1.9) {
-                checks["noHeadroomReturnsNativeEstimate"] = hud.presentation?.luminance.text == "≈400 nits"
+                checks["noHeadroomOnlyShowsSDRCapacity"] = hud.presentation?.luminance.text == "HDR ≤400 nits"
                 boostActive = false
                 appliedFactor = 1
                 show()
@@ -106,10 +108,10 @@ enum LuminanceHUDCheck {
                     ?? Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("hud-check.json")
                 try? FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: output)
-                hud.showPreview(screen: screen, level: 0.875, duration: 40,
+                hud.showPreview(screen: screen, level: 0.875, duration: 12,
                     luminance: DisplayLuminance(referenceNits: liveNits, appliedFactor: 1))
             }
-            after(45) { hud.hide(); app.terminate(nil) }
+            after(17) { hud.hide(); app.terminate(nil) }
         }
         app.run()
     }

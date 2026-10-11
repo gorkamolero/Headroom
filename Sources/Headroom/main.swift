@@ -80,7 +80,7 @@ final class DisplayRow:NSView {
             let luminance = session.luminance
             nits.stringValue = luminance.text
             nits.toolTip = luminance.explanation
-            nits.setAccessibilityLabel("Estimated brightness: \(luminance.text)")
+            nits.setAccessibilityLabel(luminance.accessibilityText)
         }
         toggle.state = session.enabled ? .on : .off
         toggle.isEnabled = session.state != .stopping && (session.enabled || session.supportsBoost || session.supportsDimming)
@@ -328,6 +328,9 @@ if CommandLine.arguments.contains("--diagnose-brightness-keys") {
          "normalBrightness": reader.brightness(displayID:screenID(screen)).map { $0 as Any } ?? NSNull(),
          "referenceNits": reading.map { $0.referenceNits as Any } ?? NSNull(),
          "maximumHDRNits": reading?.maximumHDRNits.map { $0 as Any } ?? NSNull(),
+         "systemReportedPhysicalNits": reading?.systemTelemetry?.reportedPhysicalNits.map { $0 as Any } ?? NSNull(),
+         "systemReportedHeadroom": reading?.systemTelemetry.map { $0.reportedHeadroom as Any } ?? NSNull(),
+         "systemAvailableHeadroom": reading?.systemTelemetry.map { $0.availableHeadroom as Any } ?? NSNull(),
          "currentEDRHeadroom": Double(screen.maximumExtendedDynamicRangeColorComponentValue)]
     }
     var tapCount: UInt32 = 0

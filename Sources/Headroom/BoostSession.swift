@@ -65,7 +65,7 @@ final class BoostSession {
     var enabled: Bool { state == .on || state == .preparing }
 
     init(screen: NSScreen, identity: DisplayIdentity, directory: URL,
-         luminanceReader: any DisplayLuminanceReading = DisplayLuminanceReader()) {
+         luminanceReader: any DisplayLuminanceReading = CachedDisplayLuminanceReader()) {
         self.luminanceReader = luminanceReader
         self.screen = screen; uuid = identity.uuid; self.directory = directory
         // The ceiling is a tested input range, not a measured nit ratio.
@@ -115,8 +115,8 @@ final class BoostSession {
         update()
     }
     var detail: String { errorMessage ?? message }
-    /// Read native brightness and model only acknowledged adjustments. The
-    /// boost estimate uses current headroom, never the display's potential range.
+    /// Read live system SDR white. During boost show HDR capacity separately;
+    /// neither an acknowledged LUT factor nor headroom measures desktop nits.
     var luminance: DisplayLuminance {
         let now = ProcessInfo.processInfo.systemUptime
         if now >= nextLuminanceRead {
@@ -127,10 +127,17 @@ final class BoostSession {
         case .off:
             return DisplayLuminance(referenceNits: luminanceReading?.referenceNits, appliedFactor: 1)
         case .on:
-            let boostContext = luminanceReading?.maximumHDRNits.map {
-                DisplayLuminance.BoostContext(
-                    currentHeadroom: Double(screen.maximumExtendedDynamicRangeColorComponentValue),
-                    maximumHDRNits: $0, maximumFactor: maximumFactor)
+            // CoreBrightness's raw Headroom can reflect a request (16 on
+            // the test Mac), not the public current capability. Use a fresh
+            // matched NSScreen and bound it by the available system range.
+            let currentScreen = NSScreen.screens.first { screenID($0) == screenID(screen) }
+            let boostContext = luminanceReading?.maximumHDRNits.flatMap { maximum in
+                currentScreen.map {
+                    DisplayLuminance.BoostContext(
+                        currentHeadroom: Double($0.maximumExtendedDynamicRangeColorComponentValue),
+                        maximumHDRNits: maximum,
+                        availablePeakNits: luminanceReading?.systemTelemetry.map { $0.sdrNits * $0.availableHeadroom })
+                }
             }
             return DisplayLuminance(referenceNits: luminanceReading?.referenceNits,
                 appliedFactor: confirmedFactor ?? .nan, boostActive: !isDimming,

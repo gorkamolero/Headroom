@@ -1,21 +1,19 @@
 import Foundation
 
-/// An SDR-white estimate from a system-derived reference, not a photometer
-/// measurement or the luminance of every pixel on the screen.
+/// System-derived SDR white, an explicitly assumed dimming estimate, or
+/// separately identified HDR capacity. None is an optical measurement.
 public struct DisplayLuminance: Equatable, Sendable {
-    /// Capabilities used by the uncalibrated boost model. Headroom describes
-    /// the current display state; maximumFactor is the configured control
-    /// range, which must not shrink when current headroom changes.
+    /// Current display capability, independent of the boost slider position.
+    /// It cannot establish the luminance of gamma-adjusted desktop content.
     public struct BoostContext: Equatable, Sendable {
         public let currentHeadroom: Double
         public let maximumHDRNits: Double
-        public let maximumFactor: Double
+        public let availablePeakNits: Double?
 
-        public init(currentHeadroom: Double, maximumHDRNits: Double,
-                    maximumFactor: Double) {
+        public init(currentHeadroom: Double, maximumHDRNits: Double, availablePeakNits: Double? = nil) {
             self.currentHeadroom = currentHeadroom
             self.maximumHDRNits = maximumHDRNits
-            self.maximumFactor = maximumFactor
+            self.availablePeakNits = availablePeakNits
         }
     }
 
@@ -46,10 +44,13 @@ public struct DisplayLuminance: Equatable, Sendable {
     }
 
     public let referenceNits: Double?
+    /// Estimated current SDR white; deliberately unavailable during boost.
     public let nits: Double?
+    /// Current HDR ceiling, never represented as attained desktop brightness.
+    public private(set) var availableHDRNits: Double? = nil
     public let explanation: String
 
-    /// `referenceNits` is the current native SDR-white estimate, already
+    /// `referenceNits` is live system-reported SDR white, or the fallback
     /// calculated from linear brightness and the active preset's SDR maximum.
     /// `appliedFactor` must describe a confirmed table adjustment, not a queued
     /// slider target. Apple documents Display P3 as using the sRGB transfer:
@@ -71,27 +72,23 @@ public struct DisplayLuminance: Equatable, Sendable {
             return
         }
         if boostActive {
+            nits = nil
             guard appliedFactor >= 1, let context = boostContext,
                   context.currentHeadroom.isFinite, context.currentHeadroom >= 1,
                   context.maximumHDRNits.isFinite, context.maximumHDRNits > 0,
                   context.maximumHDRNits >= reference,
-                  context.maximumFactor.isFinite, context.maximumFactor > 1 else {
-                nits = nil
-                explanation = "Nits unavailable during extra brightness: a valid applied boost, current EDR headroom, HDR preset limit, and configured boost range are required."
+                  context.availablePeakNits.map({ $0.isFinite && $0 >= 0 }) ?? true else {
+                explanation = "Boosted desktop nits are unknown. Current HDR capacity is unavailable because macOS did not provide a usable SDR reference and HDR headroom."
                 return
             }
-
-            // Apple defines EDR headroom as peak white / SDR reference white.
-            // That bounds capacity, not the response to a gamma-table change.
-            // Interpolating the confirmed control position within that bound
-            // is our stated model; it is not a measured transfer function.
-            // Compare before multiplying to avoid overflow on extreme inputs.
-            let ceiling = reference > 0 && context.currentHeadroom >= context.maximumHDRNits / reference
-                ? context.maximumHDRNits
+            // Apple defines current EDR capacity as SDR white × headroom.
+            // This is a ceiling. A gamma-table factor does NOT identify an
+            // EDR pixel value or a fraction of that capacity. No interpolation.
+            let limit = min(context.maximumHDRNits, context.availablePeakNits ?? .infinity)
+            availableHDRNits = reference > 0 && context.currentHeadroom >= limit / reference
+                ? limit
                 : reference * context.currentHeadroom
-            let progress = min(1, max(0, (appliedFactor - 1) / (context.maximumFactor - 1)))
-            nits = min(ceiling, reference + progress * (ceiling - reference))
-            explanation = "Uncalibrated boost estimate: an assumed response interpolates the confirmed boost position from native SDR white to the available HDR ceiling, bounded by current EDR headroom and the preset HDR limit. This models display capability; it is not a physical luminance measurement or a calibrated transfer-table response."
+            explanation = "Current HDR capacity from macOS: SDR white × current EDR headroom, capped by the HDR limit. This is an upper bound, not the brightness reached by the desktop. The effect of the boost transfer table is not calibrated in nits."
             return
         }
         guard appliedFactor <= 1 else {
@@ -101,7 +98,7 @@ public struct DisplayLuminance: Equatable, Sendable {
         }
         guard appliedFactor < 1 else {
             nits = reference
-            explanation = "Estimated SDR white from macOS linear brightness × the active display preset's SDR maximum. Not a physical measurement."
+            explanation = "SDR white reported by macOS, with linear brightness × the active SDR preset as a fallback. Not a physical measurement."
             return
         }
         guard let transfer = dimmingTransfer,
@@ -116,7 +113,19 @@ public struct DisplayLuminance: Equatable, Sendable {
     }
 
     public var text: String {
+        if let availableHDRNits { return "HDR ≤\(Self.number(availableHDRNits)) nits" }
         guard let nits else { return "— nits" }
+        return "≈\(Self.number(nits)) nits"
+    }
+
+    public var accessibilityText: String {
+        if let availableHDRNits {
+            return "Current HDR capacity: approximately \(Self.number(availableHDRNits)) nits. Boosted desktop luminance is unknown."
+        }
+        return "Estimated SDR white: \(text)"
+    }
+
+    private static func number(_ nits: Double) -> String {
         let format: String
         if nits == 0 || nits >= 10 {
             format = "%.0f"
@@ -128,6 +137,6 @@ public struct DisplayLuminance: Equatable, Sendable {
             format = "%.2g"
         }
         let number = String(format: format, locale: Locale(identifier: "en_US_POSIX"), nits).lowercased()
-        return "≈\(number) nits"
+        return number
     }
 }

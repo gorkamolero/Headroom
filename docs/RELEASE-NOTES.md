@@ -1,9 +1,17 @@
-# Headroom 0.5.0 — local candidate, build 18
+# Headroom 0.5.0 — local candidate, build 19
+
+- Replaced build 18's unsupported boost-nits interpolation. **Display +** now shows a separately labelled **HDR ceiling**, such as **HDR ≤480 nits**; it never presents that capacity as attained desktop brightness.
+- Native SDR white now comes directly from macOS CoreBrightness telemetry, with the existing linear-brightness/preset calculation as a fallback. Extra dimming retains its explicitly assumed sRGB estimate.
+- Background, freshness-limited reads keep private system calls off the key-handling thread. Invalid display identities, missing readings, and stale results fail closed.
+
+Installation and evidence are recorded in [VALIDATION.md](../VALIDATION.md). The public 0.4.0 download is unchanged. See the [calculation and limits](METHOD.md#nits-and-hdr-capacity--local-build-19).
+
+# Headroom 0.5.0 — superseded local candidate, build 18
 
 - Added **≈ nits** for **Display +** in the overlay and per-display menu. An uncalibrated model interpolates from live native nits toward the lower of current EDR capacity and the active preset's HDR limit, according to the recovery helper's confirmed adjustment. It stays continuous at the normal/boost boundary and lowers its ceiling when current headroom drops. The tooltip identifies the model; this is not an optical measurement or a claim of sustained full-screen brightness.
 - The read-only compatibility adapter now reads SDR and HDR limits from the same active-preset dictionary alongside linear brightness. Missing or invalid HDR metadata leaves native and dimmed nits available but makes boost nits unavailable. The calculation uses no hardcoded display maximum or potential-headroom substitute. Preparation, restoration, pending recovery, and unsupported readings still show **— nits**.
 
-Build 18 is a local candidate; installation and validation status are recorded separately in [VALIDATION.md](../VALIDATION.md). The public 0.4.0 download is unchanged. See the [model and its assumptions](METHOD.md#estimated-nits--local-build-18).
+Build 18 is a local candidate; installation and validation status are recorded separately in [VALIDATION.md](../VALIDATION.md). The public 0.4.0 download is unchanged. See the [replacement method](METHOD.md#nits-and-hdr-capacity--local-build-19).
 
 # Headroom 0.5.0 — local candidate, build 17
 

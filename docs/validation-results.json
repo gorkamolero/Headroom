@@ -847,5 +847,48 @@
     "installedBuild": 18,
     "runningInstalledKeyTapEnabled": true,
     "permissionRefresh": "Completed through System Settings after macOS authentication; running GUI brightness-key tap verified enabled."
+  },
+  "localBuild19": {
+    "version": "0.5.0",
+    "build": 19,
+    "date": "2026-10-11",
+    "installed": true,
+    "scope": "Replace unsupported boost interpolation with separately labelled HDR capacity; use macOS native nits and bounded background reads.",
+    "coreTestsPassed": 107,
+    "luminanceTestsPassed": 19,
+    "cacheChecksPassed": 28,
+    "adapterChecks": {
+      "nativeAndParser": 75,
+      "forcedFallback": 9
+    },
+    "boostCurrentOutputClaimed": false,
+    "physicalLuminanceMeasured": false,
+    "nativeReferenceComparison": {
+      "samples": 10,
+      "maximumObservedDifferenceNits": 1.4e-05,
+      "edrStateSDRRejectedAsCurrentNativeNits": true
+    },
+    "telemetryAudit": {
+      "passed": true,
+      "checksPassed": 10,
+      "elapsedSeconds": 10.454157708329149,
+      "appKitEventsDispatched": true,
+      "screensRefreshed": true,
+      "publicHeadroomDuringCarrier": 3.9980008602142334,
+      "rawRequestedHeadroomDuringCarrier": 16,
+      "gammaRestorationMaximumDifference": 0,
+      "nativeRestorationDifference": 0,
+      "remainingJournals": 0
+    },
+    "sessionChecksPassed": 13,
+    "keyboardControllerChanged": false,
+    "publicRelease": "0.4.0",
+    "installationPath": "/Applications/Headroom.app",
+    "runningGUIBrightnessKeyTapEnabled": true,
+    "newAuthenticationPromptRequired": false,
+    "hudChecksPassed": 17,
+    "releaseBuildPassed": true,
+    "deepStrictSignaturePassed": true,
+    "independentCodeReview": "No remaining code blocker; dimensional reference-basis and requested-headroom findings corrected."
   }
 }

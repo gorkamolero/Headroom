@@ -179,7 +179,7 @@ private struct BrightnessHUDContent: View {
                 .frame(width: 124, alignment: .trailing)
                 .position(x: 214, y: 17.5)
                 .help(state.presentation.luminance.explanation)
-                .accessibilityLabel(state.presentation.luminance.text)
+                .accessibilityLabel(state.presentation.luminance.accessibilityText)
             Image(systemName: "sun.min.fill")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.white)

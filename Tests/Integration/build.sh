@@ -17,6 +17,7 @@ swiftc "${common[@]}" -o "$app/Contents/MacOS/UnifiedKeysHarness" \
   "$project_dir/Sources/Headroom/BoostSession.swift" \
   "$project_dir/Sources/Headroom/Compatibility/NormalBrightnessReader.swift" \
   "$project_dir/Sources/Headroom/Compatibility/DisplayLuminanceReader.swift" \
+  "$project_dir/Sources/Headroom/Compatibility/CoreBrightnessLuminanceReader.swift" \
   "$binary_dir/DisplayCore.o" "$binary_dir/DisplayActivation.o"
 swiftc "${common[@]}" -o "$harness_dir/Watchdog" \
   "$source_dir/Watchdog.swift" \

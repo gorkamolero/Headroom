@@ -7,8 +7,18 @@ struct DisplayLuminanceReadingSnapshot {
     /// System-derived native luminance, before Headroom's transfer-table scale.
     /// This is a calculated reference, not a physical light measurement.
     let referenceNits: Double
-    /// Active preset's HDR limit, when it is valid for that same SDR reference.
+    /// The same system status or active preset's HDR limit for this reference.
     let maximumHDRNits: Double?
+    /// Values returned together in CoreBrightness's per-display status. These
+    /// describe macOS's display state, not optically measured output after LUTs.
+    let systemTelemetry: DisplayLuminanceSystemTelemetry?
+
+    init(referenceNits: Double, maximumHDRNits: Double?,
+         systemTelemetry: DisplayLuminanceSystemTelemetry? = nil) {
+        self.referenceNits = referenceNits
+        self.maximumHDRNits = maximumHDRNits
+        self.systemTelemetry = systemTelemetry
+    }
 }
 
 protocol DisplayLuminanceReading {
@@ -19,6 +29,116 @@ protocol DisplayLuminanceReading {
 extension DisplayLuminanceReading {
     func referenceNits(displayID: UInt32) -> Double? {
         reading(displayID: displayID)?.referenceNits
+    }
+}
+
+/// Keeps synchronous private-daemon calls away from UI and keyboard handling.
+/// A failed, missing, or one-second-old reading is unavailable. Only this serial
+/// worker creates, uses, and releases its private reader; cache locks are never
+/// held while that reader is called.
+final class CachedDisplayLuminanceReader: DisplayLuminanceReading {
+    private struct Entry {
+        var snapshot: DisplayLuminanceReadingSnapshot?
+        var sampledAt = -Double.infinity
+        var nextRefreshAt = -Double.infinity
+        var lastAccess: Double
+        var inFlight = false
+    }
+
+    private final class Worker {
+        let makeReader: () -> any DisplayLuminanceReading
+        var reader: (any DisplayLuminanceReading)?
+
+        init(makeReader: @escaping () -> any DisplayLuminanceReading) {
+            self.makeReader = makeReader
+        }
+
+        func reading(displayID: UInt32) -> DisplayLuminanceReadingSnapshot? {
+            if reader == nil { reader = makeReader() }
+            return reader?.reading(displayID: displayID)
+        }
+
+        func dispose() { reader = nil }
+    }
+
+    private let lock = NSLock()
+    private var entries: [UInt32: Entry] = [:]
+    private let queue = DispatchQueue(label: "Headroom.luminance-readings", qos: .userInitiated)
+    private let worker: Worker
+    private let clock: () -> Double
+    private let refreshInterval: Double
+    private let maximumAge: Double
+    private let maximumDisplays: Int
+
+    init(refreshInterval: Double = 0.1, maximumAge: Double = 1,
+         maximumDisplays: Int = 8,
+         clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime },
+         makeReader: @escaping () -> any DisplayLuminanceReading = { DisplayLuminanceReader() }) {
+        precondition(refreshInterval.isFinite && refreshInterval > 0)
+        precondition(maximumAge.isFinite && maximumAge >= refreshInterval)
+        precondition(maximumDisplays > 0)
+        self.refreshInterval = refreshInterval
+        self.maximumAge = maximumAge
+        self.maximumDisplays = maximumDisplays
+        self.clock = clock
+        self.worker = Worker(makeReader: makeReader)
+    }
+
+    func reading(displayID: UInt32) -> DisplayLuminanceReadingSnapshot? {
+        guard displayID != 0 else { return nil }
+        let now = clock()
+        lock.lock()
+        defer { lock.unlock() }
+
+        // Forget unused disconnected displays and cap both cached identities
+        // and pending work. A stalled daemon cannot create an unbounded queue.
+        entries = entries.filter { $0.value.inFlight || now - $0.value.lastAccess < 10 }
+        if entries[displayID] == nil {
+            if entries.count >= maximumDisplays {
+                guard let oldest = entries.filter({ !$0.value.inFlight })
+                    .min(by: { $0.value.lastAccess < $1.value.lastAccess })?.key else { return nil }
+                entries.removeValue(forKey: oldest)
+            }
+            entries[displayID] = Entry(lastAccess: now)
+        }
+        var entry = entries[displayID]!
+        entry.lastAccess = now
+        if !entry.inFlight && now >= entry.nextRefreshAt {
+            entry.inFlight = true
+            entry.nextRefreshAt = now + refreshInterval
+            let worker = self.worker
+            let clock = self.clock
+            queue.async { [weak self, worker, clock] in
+                guard self != nil else { return }
+                let startedAt = clock()
+                let result = autoreleasepool { worker.reading(displayID: displayID) }
+                self?.complete(displayID: displayID, snapshot: result,
+                               startedAt: startedAt, finishedAt: clock())
+            }
+        }
+        entries[displayID] = entry
+        let age = now - entry.sampledAt
+        return age >= 0 && age < maximumAge ? entry.snapshot : nil
+    }
+
+    private func complete(displayID: UInt32, snapshot: DisplayLuminanceReadingSnapshot?,
+                          startedAt: Double, finishedAt: Double) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var entry = entries[displayID] else { return }
+        let age = finishedAt - startedAt
+        // Timestamp the start conservatively: a daemon answer delayed for a
+        // second must never revive an already obsolete brightness reading.
+        entry.snapshot = age >= 0 && age < maximumAge ? snapshot : nil
+        entry.sampledAt = startedAt
+        entry.nextRefreshAt = finishedAt + refreshInterval
+        entry.inFlight = false
+        entries[displayID] = entry
+    }
+
+    deinit {
+        let worker = self.worker
+        queue.async { worker.dispose() }
     }
 }
 
@@ -39,6 +159,7 @@ final class DisplayLuminanceReader: DisplayLuminanceReading {
     private let displayServices: UnsafeMutableRawPointer?
     private let monitorPanel: UnsafeMutableRawPointer?
     private let getLinearBrightness: GetLinearBrightness?
+    private let coreBrightness = CoreBrightnessLuminanceReader()
 
     init() {
         let displayServices = dlopen(
@@ -59,6 +180,30 @@ final class DisplayLuminanceReader: DisplayLuminanceReading {
     }
 
     func reading(displayID: UInt32) -> DisplayLuminanceReadingSnapshot? {
+        guard displayID != 0 else { return nil }
+        return Self.referenceSnapshot(systemTelemetry: coreBrightness.reading(displayID: displayID)) {
+            presetReading(displayID: displayID)
+        }
+    }
+
+    /// EDRState.SDR can remain fixed while native brightness changes. On the
+    /// verified host, NitsPhysical tracks DisplayServices linear brightness
+    /// times the active SDR preset; the EDR state's SDR field does not.
+    static func referenceSnapshot(systemTelemetry telemetry: DisplayLuminanceSystemTelemetry?,
+                                  fallback: () -> DisplayLuminanceReadingSnapshot?) -> DisplayLuminanceReadingSnapshot? {
+        if let telemetry, let native = telemetry.reportedPhysicalNits,
+           native.isFinite, native >= 0, native <= telemetry.maximumHDRNits {
+            return DisplayLuminanceReadingSnapshot(
+                referenceNits: native,
+                maximumHDRNits: telemetry.maximumHDRNits,
+                systemTelemetry: telemetry)
+        }
+        guard let preset = fallback() else { return nil }
+        return DisplayLuminanceReadingSnapshot(referenceNits: preset.referenceNits,
+            maximumHDRNits: preset.maximumHDRNits, systemTelemetry: telemetry)
+    }
+
+    private func presetReading(displayID: UInt32) -> DisplayLuminanceReadingSnapshot? {
         guard displayID != 0, let getLinearBrightness, monitorPanel != nil,
               let managerClass = NSClassFromString("MPDisplayMgr"),
               let manager = object(managerClass as AnyObject, selector: "sharedMgr"),

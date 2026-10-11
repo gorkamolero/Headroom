@@ -89,6 +89,7 @@ private final class LuminanceTrial {
             try require(session.state == .off && session.supportsBoost && session.maximumFactor >= 1.2,
                         "This trial requires an available boost range through 1.2.")
             try require(nativeUnchanged, "Native brightness changed before the trial began.")
+            try wait("asynchronous native reference", timeout: 2) { self.session.luminance.nits != nil }
             let initial = session.luminance
             try require(initial.nits != nil, "No usable system-derived native nits reference.")
             checks["nativeNitsAvailable"] = true
@@ -100,18 +101,19 @@ private final class LuminanceTrial {
             checks["preparingNitsUnavailable"] = true
             try wait("first acknowledged boost", timeout: 10) { self.matchesAcknowledgedFactor(1.1) }
             try sample("acknowledged-1.1", factor: 1.1)
-            let firstNits = session.luminance.nits!
+            let firstCapacity = session.luminance.availableHDRNits
 
             session.setLevel(1.2)
             // No run-loop work has occurred yet: this must still describe the
             // prior acknowledgement rather than the newly queued target.
-            try require(matchesModel(factor: 1.1), "A queued target leaked into the nits reading.")
-            checks["pendingTargetKeepsAcknowledgedNits"] = true
+            try require(session.luminance.nits == nil && session.luminance.availableHDRNits == firstCapacity,
+                        "A queued target was misrepresented as current luminance.")
+            checks["pendingTargetCannotInventCurrentNits"] = true
             try wait("second acknowledged boost", timeout: 3) { self.matchesAcknowledgedFactor(1.2) }
             try sample("acknowledged-1.2", factor: 1.2)
-            try require(session.luminance.nits! > firstNits,
-                        "The live boost estimate did not rise after the acknowledged update.")
-            checks["boostEstimateUpdatesLive"] = true
+            try require(session.luminance.nits == nil && session.luminance.availableHDRNits != nil,
+                        "An acknowledged boost must distinguish HDR capacity from current luminance.")
+            checks["boostOnlyReportsCapacity"] = true
             checks["nativeBrightnessUnchangedDuringTrial"] = nativeUnchanged
             try require(nativeUnchanged, "The trial changed native brightness.")
 
@@ -150,7 +152,7 @@ private final class LuminanceTrial {
             "passed": passed, "checks": checks, "samples": samples,
             "activeDeadlineSeconds": 20, "nativeBrightnessWritesByHarness": 0,
             "physicalLuminanceMeasured": false,
-            "modelIsUncalibrated": true,
+            "boostCurrentLuminanceClaimed": false,
             "gammaRestorationMaximumDifference": restorationDifference as Any? ?? NSNull(),
             "remainingJournals": journals as Any? ?? NSNull()
         ]
@@ -191,20 +193,6 @@ private final class LuminanceTrial {
                     "Timed out waiting for \(description); session is \(session.state): \(session.detail)")
     }
 
-    private func matchesModel(factor: Double) -> Bool {
-        let actual = session.luminance
-        guard let actualNits = actual.nits,
-              let reading = luminanceReader.reading(displayID: baseline.identity.displayID),
-              let maximumHDR = reading.maximumHDRNits else { return false }
-        let expected = DisplayLuminance(referenceNits: actual.referenceNits,
-            appliedFactor: factor, boostActive: true,
-            boostContext: .init(currentHeadroom: Double(session.screen.maximumExtendedDynamicRangeColorComponentValue),
-                                maximumHDRNits: maximumHDR, maximumFactor: session.maximumFactor))
-        guard let expectedNits = expected.nits else { return false }
-        // Headroom can update between these two read-only system calls.
-        return abs(actualNits - expectedNits) <= 0.5
-    }
-
     private func matchesAcknowledgedFactor(_ factor: Double) -> Bool {
         guard session.state == .on,
               Double(session.screen.maximumExtendedDynamicRangeColorComponentValue) >= factor,
@@ -213,22 +201,24 @@ private final class LuminanceTrial {
               let clamped = try? GammaTable(red: expected.red.map { min(1, $0) },
                 green: expected.green.map { min(1, $0) }, blue: expected.blue.map { min(1, $0) }) else { return false }
         return min(actual.maxDifference(from: expected), actual.maxDifference(from: clamped)) <= 0.0005
-            && matchesModel(factor: factor)
+            && session.luminance.nits == nil && session.luminance.availableHDRNits != nil
     }
 
     private func sample(_ name: String, factor: Double) throws {
         let estimate = session.luminance
-        guard let nits = estimate.nits, let reference = estimate.referenceNits,
+        guard estimate.nits == nil, let capacity = estimate.availableHDRNits, let reference = estimate.referenceNits,
               let reading = luminanceReader.reading(displayID: baseline.identity.displayID),
               let maximumHDR = reading.maximumHDRNits else {
-            throw DisplayError.invalid("An acknowledged boost did not produce a usable nits estimate.")
+            throw DisplayError.invalid("An acknowledged boost did not produce a separately identified HDR capacity.")
         }
-        let headroom = Double(session.screen.maximumExtendedDynamicRangeColorComponentValue)
-        let ceiling = min(maximumHDR, reference * headroom)
-        try require(nits >= reference && nits <= ceiling + 0.5,
-                    "The estimate exceeded its current system-reported capacity bounds.")
+        let headroom = Double(NSScreen.screens.first { screenID($0) == baseline.identity.displayID }?
+            .maximumExtendedDynamicRangeColorComponentValue ?? 0)
+        let systemPeak = reading.systemTelemetry.map { $0.sdrNits * $0.availableHeadroom } ?? .infinity
+        let ceiling = min(maximumHDR, reference * headroom, systemPeak)
+        try require(abs(capacity - ceiling) <= 0.5,
+                    "The reported HDR capacity does not match the system reading.")
         samples.append([
-            "name": name, "acknowledgedFactor": factor, "estimatedNits": nits,
+            "name": name, "acknowledgedFactor": factor, "availableHDRNits": capacity, "currentBoostedNits": NSNull(),
             "referenceNits": reference, "currentHeadroom": headroom,
             "presetMaximumHDRNits": maximumHDR, "currentCeilingNits": ceiling,
             "maximumControlFactor": session.maximumFactor, "displayText": estimate.text,

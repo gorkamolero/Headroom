@@ -3,12 +3,13 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 swift build --package-path "$project_dir" -c release --triple arm64-apple-macosx13.0 --product Headroom
 binary_dir="$(swift build --package-path "$project_dir" -c release --triple arm64-apple-macosx13.0 --show-bin-path)"
-app="$project_dir/Evidence/nits-build18/NitsHUDCheck.app"
+app="$project_dir/Evidence/nits-build19/NitsHUDCheck.app"
 mkdir -p "$app/Contents/MacOS"
 swiftc -target arm64-apple-macosx13.0 -I "$binary_dir" \
   "$project_dir/Tests/Integration/LuminanceHUD.swift" \
   "$project_dir/Sources/Headroom/BrightnessHUD.swift" \
   "$project_dir/Sources/Headroom/Compatibility/DisplayLuminanceReader.swift" \
+  "$project_dir/Sources/Headroom/Compatibility/CoreBrightnessLuminanceReader.swift" \
   "$binary_dir/DisplayCore.o" -o "$app/Contents/MacOS/NitsHUDCheck"
 cat > "$app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
