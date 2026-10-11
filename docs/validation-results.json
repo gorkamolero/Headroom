@@ -890,5 +890,63 @@
     "releaseBuildPassed": true,
     "deepStrictSignaturePassed": true,
     "independentCodeReview": "No remaining code blocker; dimensional reference-basis and requested-headroom findings corrected."
+  },
+  "localBuild20": {
+    "version": "0.5.0",
+    "build": 20,
+    "date": "2026-10-11",
+    "scope": "Explicit uncalibrated extended-sRGB boost nits prediction from acknowledged factor; HDR capacity remains separate.",
+    "installed": false,
+    "staged": true,
+    "activeInstalledBuild": 19,
+    "coreTestsPassed": 110,
+    "luminanceTestsPassed": 22,
+    "hudChecksPassed": 20,
+    "sessionChecksPassed": 15,
+    "liveSamples": [
+      {
+        "acknowledgedFactor": 1.1,
+        "availableHDRNits": 548.9765253837686,
+        "currentCeilingNits": 548.9765253837686,
+        "currentHeadroom": 1.441683292388916,
+        "displayText": "\u2248473 nits est.",
+        "maximumControlFactor": 2,
+        "modeledBoostNits": 473.23274663758826,
+        "modelOpticallyValidated": false,
+        "name": "acknowledged-1.1",
+        "nativeBrightness": 0.9797649383544922,
+        "presetMaximumHDRNits": 1600,
+        "referenceNits": 380.78857421875
+      },
+      {
+        "acknowledgedFactor": 1.2,
+        "availableHDRNits": 609.1272267833119,
+        "currentCeilingNits": 609.1272267833119,
+        "currentHeadroom": 1.599646806716919,
+        "displayText": "\u2248578 nits est.",
+        "maximumControlFactor": 2,
+        "modeledBoostNits": 577.5944175070903,
+        "modelOpticallyValidated": false,
+        "name": "acknowledged-1.2",
+        "nativeBrightness": 0.9797649383544922,
+        "presetMaximumHDRNits": 1600,
+        "referenceNits": 380.78857421875
+      }
+    ],
+    "boostModelPredictionOnly": true,
+    "boostPredictionOpticallyValidated": false,
+    "physicalLuminanceMeasured": false,
+    "gammaRestorationMaximumDifference": 0,
+    "nativeRestorationDifference": 0,
+    "remainingJournals": 0,
+    "independentWatchdogPassed": true,
+    "initialAttempt": "Stopped before boost when native brightness changed during setup; baseline restored exactly.",
+    "releaseBuildPassed": true,
+    "deepStrictSignaturePassed": true,
+    "keyboardControllerChanged": false,
+    "activationStatus": "Touch ID required to refresh existing Accessibility identity; cancelled per user preference. Working build19 restored and running key tap verified enabled.",
+    "restoredBuild19BrightnessKeyTapEnabled": true,
+    "publicRelease": "0.4.0",
+    "independentReview": "No code blockers identified; assumption and clipping uncertainty explicit."
   }
 }

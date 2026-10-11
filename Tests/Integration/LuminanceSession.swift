@@ -43,6 +43,7 @@ private final class LuminanceTrial {
     private var maximumTimer: Timer?
     private var deadline = Double.infinity
     private var deadlineReached = false
+    private var displayRefreshFailed = false
     private var resultError: String?
 
     init(baseline: TrialBaseline, directory: URL) throws {
@@ -68,8 +69,13 @@ private final class LuminanceTrial {
 
     func run() -> Bool {
         deadline = ProcessInfo.processInfo.systemUptime + 20
+        let observer = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in self?.refreshScreenOrStop() }
         let heartbeat = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.session.tick(now: ProcessInfo.processInfo.systemUptime)
+            guard let self else { return }
+            self.refreshScreenOrStop()
+            self.session.tick(now: ProcessInfo.processInfo.systemUptime)
         }
         self.heartbeat = heartbeat
         RunLoop.main.add(heartbeat, forMode: .common)
@@ -80,6 +86,7 @@ private final class LuminanceTrial {
         self.maximumTimer = maximumTimer
         RunLoop.main.add(maximumTimer, forMode: .common)
         defer {
+            NotificationCenter.default.removeObserver(observer)
             heartbeat.invalidate()
             maximumTimer.invalidate()
             UserDefaults.standard.removeObject(forKey: "boost.\(baseline.identity.uuid)")
@@ -100,20 +107,28 @@ private final class LuminanceTrial {
                         "Preparing must show unavailable nits before acknowledgement.")
             checks["preparingNitsUnavailable"] = true
             try wait("first acknowledged boost", timeout: 10) { self.matchesAcknowledgedFactor(1.1) }
-            try sample("acknowledged-1.1", factor: 1.1)
-            let firstCapacity = session.luminance.availableHDRNits
+            let first = try sample("acknowledged-1.1", factor: 1.1)
+            let priorPrediction = session.luminance.nits
 
             session.setLevel(1.2)
             // No run-loop work has occurred yet: this must still describe the
             // prior acknowledgement rather than the newly queued target.
-            try require(session.luminance.nits == nil && session.luminance.availableHDRNits == firstCapacity,
-                        "A queued target was misrepresented as current luminance.")
-            checks["pendingTargetCannotInventCurrentNits"] = true
+            try require(session.luminance.nits == priorPrediction && session.luminance.isModeledBoost,
+                        "A queued target changed the prediction before acknowledgement.")
+            checks["pendingTargetKeepsPriorPrediction"] = true
             try wait("second acknowledged boost", timeout: 3) { self.matchesAcknowledgedFactor(1.2) }
-            try sample("acknowledged-1.2", factor: 1.2)
-            try require(session.luminance.nits == nil && session.luminance.availableHDRNits != nil,
-                        "An acknowledged boost must distinguish HDR capacity from current luminance.")
-            checks["boostOnlyReportsCapacity"] = true
+            let second = try sample("acknowledged-1.2", factor: 1.2)
+            try require(second.nits != nil && second.availableHDRNits != nil && second.isModeledBoost,
+                        "An acknowledged boost must identify its model prediction and separate HDR capacity.")
+            checks["boostPredictionAndCapacityAreIdentified"] = true
+            if let firstNits = first.nits, let secondNits = second.nits,
+               let secondCapacity = second.availableHDRNits, let secondReference = second.referenceNits {
+                let rawSecondPrediction = secondReference * pow((1.2 + 0.055) / 1.055, 2.4)
+                let canRise = min(rawSecondPrediction, secondCapacity) > firstNits + 0.5
+                try require(!canRise || secondNits > firstNits,
+                            "The acknowledged prediction did not rise when current capacity permitted it.")
+                checks["boostPredictionRisesWhenCapacityPermits"] = true
+            }
             checks["nativeBrightnessUnchangedDuringTrial"] = nativeUnchanged
             try require(nativeUnchanged, "The trial changed native brightness.")
 
@@ -144,15 +159,16 @@ private final class LuminanceTrial {
             checks["nativeBrightnessRestored"] = nativeUnchanged
             checks["offNitsAvailableAfterRestoration"] = session.state == .off && session.luminance.nits != nil
             checks["completedWithinActiveDeadline"] = !deadlineReached
+            checks["displayRefreshRemainedAvailable"] = !displayRefreshFailed
         } catch {
             resultError = [resultError, error.localizedDescription].compactMap { $0 }.joined(separator: " ")
         }
-        let passed = resultError == nil && checks.count == 13 && checks.values.allSatisfy { $0 }
+        let passed = resultError == nil && checks.count == 15 && checks.values.allSatisfy { $0 }
         var result: [String: Any] = [
             "passed": passed, "checks": checks, "samples": samples,
             "activeDeadlineSeconds": 20, "nativeBrightnessWritesByHarness": 0,
             "physicalLuminanceMeasured": false,
-            "boostCurrentLuminanceClaimed": false,
+            "boostModelPredictionOnly": true, "boostPredictionOpticallyValidated": false,
             "gammaRestorationMaximumDifference": restorationDifference as Any? ?? NSNull(),
             "remainingJournals": journals as Any? ?? NSNull()
         ]
@@ -180,36 +196,68 @@ private final class LuminanceTrial {
     private func pump(_ seconds: TimeInterval) {
         let stop = Date().addingTimeInterval(seconds)
         while Date() < stop {
-            _ = RunLoop.main.run(mode: .default, before: min(stop, Date().addingTimeInterval(0.01)))
+            // Dispatch real AppKit events so screen-change notifications update
+            // NSScreen headroom, as they do in the production application.
+            if let event = NSApp.nextEvent(matching: .any,
+                until: min(stop, Date().addingTimeInterval(0.01)),
+                inMode: .default, dequeue: true) {
+                NSApp.sendEvent(event)
+            }
+            NSApp.updateWindows()
+        }
+    }
+
+    private func refreshScreen() throws {
+        guard let screen = NSScreen.screens.first(where: {
+            screenID($0) == baseline.identity.displayID
+        }) else { throw DisplayError.invalid("The recorded display disappeared during the luminance trial.") }
+        // Avoid updateScreen's stored-target reload in this isolated trial.
+        session.screen = screen
+    }
+
+    private func refreshScreenOrStop() {
+        guard !displayRefreshFailed else { return }
+        do { try refreshScreen() }
+        catch {
+            displayRefreshFailed = true
+            resultError = error.localizedDescription
+            session.stop(reason: "Luminance trial display refresh failed")
         }
     }
 
     private func wait(_ description: String, timeout: Double, until condition: () -> Bool) throws {
         let until = min(deadline, ProcessInfo.processInfo.systemUptime + timeout)
-        while !condition() && ProcessInfo.processInfo.systemUptime < until && !deadlineReached {
+        while !condition() && ProcessInfo.processInfo.systemUptime < until && !deadlineReached && !displayRefreshFailed {
             pump(0.02)
         }
-        try require(!deadlineReached && condition(),
+        try require(!deadlineReached && !displayRefreshFailed && condition(),
                     "Timed out waiting for \(description); session is \(session.state): \(session.detail)")
     }
 
     private func matchesAcknowledgedFactor(_ factor: Double) -> Bool {
+        refreshScreenOrStop()
+        let estimate = session.luminance
         guard session.state == .on,
               Double(session.screen.maximumExtendedDynamicRangeColorComponentValue) >= factor,
+              let prediction = estimate.nits, let reference = estimate.referenceNits,
+              let capacity = estimate.availableHDRNits, estimate.isModeledBoost,
               let actual = try? GammaTable.read(display: baseline.identity.displayID),
               let expected = try? baseline.gamma.scaled(factor: Float(factor)),
               let clamped = try? GammaTable(red: expected.red.map { min(1, $0) },
                 green: expected.green.map { min(1, $0) }, blue: expected.blue.map { min(1, $0) }) else { return false }
+        let expectedPrediction = min(capacity, reference * pow((factor + 0.055) / 1.055, 2.4))
         return min(actual.maxDifference(from: expected), actual.maxDifference(from: clamped)) <= 0.0005
-            && session.luminance.nits == nil && session.luminance.availableHDRNits != nil
+            && abs(prediction - expectedPrediction) <= 0.5
     }
 
-    private func sample(_ name: String, factor: Double) throws {
+    private func sample(_ name: String, factor: Double) throws -> DisplayLuminance {
+        try refreshScreen()
         let estimate = session.luminance
-        guard estimate.nits == nil, let capacity = estimate.availableHDRNits, let reference = estimate.referenceNits,
+        guard let prediction = estimate.nits, estimate.isModeledBoost,
+              let capacity = estimate.availableHDRNits, let reference = estimate.referenceNits,
               let reading = luminanceReader.reading(displayID: baseline.identity.displayID),
               let maximumHDR = reading.maximumHDRNits else {
-            throw DisplayError.invalid("An acknowledged boost did not produce a separately identified HDR capacity.")
+            throw DisplayError.invalid("An acknowledged boost did not produce an identified prediction and separate HDR capacity.")
         }
         let headroom = Double(NSScreen.screens.first { screenID($0) == baseline.identity.displayID }?
             .maximumExtendedDynamicRangeColorComponentValue ?? 0)
@@ -217,13 +265,18 @@ private final class LuminanceTrial {
         let ceiling = min(maximumHDR, reference * headroom, systemPeak)
         try require(abs(capacity - ceiling) <= 0.5,
                     "The reported HDR capacity does not match the system reading.")
+        let modelPrediction = min(ceiling, reference * pow((factor + 0.055) / 1.055, 2.4))
+        try require(abs(prediction - modelPrediction) <= 0.5 && prediction <= capacity,
+                    "The prediction does not match the acknowledged extended-sRGB model and capacity cap.")
         samples.append([
-            "name": name, "acknowledgedFactor": factor, "availableHDRNits": capacity, "currentBoostedNits": NSNull(),
+            "name": name, "acknowledgedFactor": factor, "availableHDRNits": capacity,
+            "modeledBoostNits": prediction, "modelOpticallyValidated": false,
             "referenceNits": reference, "currentHeadroom": headroom,
             "presetMaximumHDRNits": maximumHDR, "currentCeilingNits": ceiling,
             "maximumControlFactor": session.maximumFactor, "displayText": estimate.text,
             "nativeBrightness": nativeReader.brightness(displayID: baseline.identity.displayID) as Any? ?? NSNull()
         ])
         checks["\(name)-withinCurrentBounds"] = true
+        return estimate
     }
 }

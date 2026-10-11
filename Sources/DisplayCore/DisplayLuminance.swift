@@ -1,7 +1,7 @@
 import Foundation
 
-/// System-derived SDR white, an explicitly assumed dimming estimate, or
-/// separately identified HDR capacity. None is an optical measurement.
+/// System-derived native white and explicitly modeled dim/boost predictions.
+/// HDR capacity remains separate. None is an optical measurement.
 public struct DisplayLuminance: Equatable, Sendable {
     /// Current display capability, independent of the boost slider position.
     /// It cannot establish the luminance of gamma-adjusted desktop content.
@@ -44,15 +44,16 @@ public struct DisplayLuminance: Equatable, Sendable {
     }
 
     public let referenceNits: Double?
-    /// Estimated current SDR white; deliberately unavailable during boost.
+    /// Native white or a prediction under the stated transfer assumption.
     public let nits: Double?
+    public private(set) var isModeledBoost = false
     /// Current HDR ceiling, never represented as attained desktop brightness.
     public private(set) var availableHDRNits: Double? = nil
     public let explanation: String
 
     /// `referenceNits` is live system-reported SDR white, or the fallback
     /// calculated from linear brightness and the active preset's SDR maximum.
-    /// `appliedFactor` must describe a confirmed table adjustment, not a queued
+    /// `appliedFactor` is the helper-acknowledged table write parameter, not a queued
     /// slider target. Apple documents Display P3 as using the sRGB transfer:
     /// https://developer.apple.com/documentation/coregraphics/cgcolorspace/displayp3
     /// This motivates the default assumption; it does not validate the panel's
@@ -72,23 +73,47 @@ public struct DisplayLuminance: Equatable, Sendable {
             return
         }
         if boostActive {
-            nits = nil
             guard appliedFactor >= 1, let context = boostContext,
                   context.currentHeadroom.isFinite, context.currentHeadroom >= 1,
                   context.maximumHDRNits.isFinite, context.maximumHDRNits > 0,
                   context.maximumHDRNits >= reference,
                   context.availablePeakNits.map({ $0.isFinite && $0 >= 0 }) ?? true else {
-                explanation = "Boosted desktop nits are unknown. Current HDR capacity is unavailable because macOS did not provide a usable SDR reference and HDR headroom."
+                nits = nil
+                explanation = "Boost estimate unavailable: macOS did not provide a usable native nits reference and current HDR capacity."
                 return
             }
-            // Apple defines current EDR capacity as SDR white × headroom.
-            // This is a ceiling. A gamma-table factor does NOT identify an
-            // EDR pixel value or a fraction of that capacity. No interpolation.
+            // Capacity is an independent ceiling, never a slider endpoint.
+            // Keep the private available-peak bound in its own reference basis.
             let limit = min(context.maximumHDRNits, context.availablePeakNits ?? .infinity)
-            availableHDRNits = reference > 0 && context.currentHeadroom >= limit / reference
+            let capacity = reference > 0 && context.currentHeadroom >= limit / reference
                 ? limit
                 : reference * context.currentHeadroom
-            explanation = "Current HDR capacity from macOS: SDR white × current EDR headroom, capped by the HDR limit. This is an upper bound, not the brightness reached by the desktop. The effect of the boost transfer table is not calibrated in nits."
+            availableHDRNits = capacity
+            guard capacity >= reference else {
+                nits = nil
+                explanation = "Boost estimate unavailable: current HDR capacity is below the native nits reference."
+                return
+            }
+
+            // Explicit hypothesis: the acknowledged table gain behaves as
+            // encoded RGB gain that survives into EDR. Decode it with the
+            // extended sRGB EOTF, rather than stretching a slider to its max.
+            // https://www.w3.org/TR/css-color-4/#color-conversion-code
+            // Apple's normalized gamma readback clamps above 1 on the test
+            // host: it does NOT verify this hypothesis. This predicts output
+            // under the assumption; it is not a calibrated panel response.
+            isModeledBoost = true
+            if reference == 0 || appliedFactor == 1 {
+                nits = reference
+            } else {
+                // Algebraically B * ((f + .055) / 1.055)^2.4. Log space
+                // avoids overflowing the intermediate gain for extreme input.
+                let logPrediction = log(reference)
+                    + 2.4 * log1p((appliedFactor - 1) / 1.055)
+                nits = logPrediction >= log(capacity)
+                    ? capacity : max(reference, min(capacity, exp(logPrediction)))
+            }
+            explanation = "Uncalibrated boost estimate assuming an extended-sRGB light response to the acknowledged adjustment. Actual output may differ: normalized display-table readback does not establish this response. Available HDR ceiling: approximately \(Self.number(capacity)) nits. This is a calculated prediction, not a measurement."
             return
         }
         guard appliedFactor <= 1 else {
@@ -113,14 +138,13 @@ public struct DisplayLuminance: Equatable, Sendable {
     }
 
     public var text: String {
-        if let availableHDRNits { return "HDR ≤\(Self.number(availableHDRNits)) nits" }
         guard let nits else { return "— nits" }
-        return "≈\(Self.number(nits)) nits"
+        return "≈\(Self.number(nits)) nits" + (isModeledBoost ? " est." : "")
     }
 
     public var accessibilityText: String {
-        if let availableHDRNits {
-            return "Current HDR capacity: approximately \(Self.number(availableHDRNits)) nits. Boosted desktop luminance is unknown."
+        if isModeledBoost, let nits {
+            return "Calculated boost estimate: approximately \(Self.number(nits)) nits. Uncalibrated extended-sRGB assumption; actual output may differ."
         }
         return "Estimated SDR white: \(text)"
     }

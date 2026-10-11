@@ -72,18 +72,33 @@ enum LuminanceHUDCheck {
                 show()
             }
             after(1.4) {
-                checks["boostCapacityNotCurrentNits"] = hud.presentation?.luminance.text == "HDR ≤1201 nits"
-                    && hud.presentation?.luminance.nits == nil
-                checks["capacityLabelFitsExistingHUD"] = ("HDR ≤1600 nits" as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)]).width <= 124
+                checks["boostPredictionIsExplicitlyEstimated"] = hud.presentation?.luminance.text == "≈1015 nits est."
+                    && hud.presentation?.luminance.isModeledBoost == true
+                if let prediction = hud.presentation?.luminance.nits,
+                   let capacity = hud.presentation?.luminance.availableHDRNits {
+                    checks["boostPredictionKeepsSeparateCapacity"] = prediction < capacity
+                        && abs(capacity - 1200.6) < 0.0001
+                }
+                checks["longestEstimateLabelFitsExistingHUD"] =
+                    ["≈10000 nits est.", "≈1600 nits est.", "≈3.4e-05 nits est."].allSatisfy {
+                        ($0 as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)]).width <= 124
+                    }
+                let missingContext = DisplayLuminance(referenceNits: 400.2, appliedFactor: 1.5, boostActive: true)
+                let missingReference = DisplayLuminance(referenceNits: nil, appliedFactor: 1.5, boostActive: true,
+                    boostContext: .init(currentHeadroom: 3, maximumHDRNits: 1600))
+                checks["missingContextLeavesBothValuesUnavailable"] = missingContext.nits == nil
+                    && missingContext.availableHDRNits == nil && missingContext.text == "— nits"
+                checks["missingReferenceLeavesBothValuesUnavailable"] = missingReference.nits == nil
+                    && missingReference.availableHDRNits == nil && missingReference.text == "— nits"
                 checks["boostLabel"] = hud.presentation?.title == "Display +"
                 headroom = 2
             }
             after(1.65) {
-                checks["fallingHeadroomUpdatesWithoutKeyEvent"] = hud.presentation?.luminance.text == "HDR ≤800 nits"
+                checks["fallingHeadroomUpdatesWithoutKeyEvent"] = hud.presentation?.luminance.text == "≈800 nits est."
                 headroom = 1
             }
             after(1.9) {
-                checks["noHeadroomOnlyShowsSDRCapacity"] = hud.presentation?.luminance.text == "HDR ≤400 nits"
+                checks["noHeadroomCapsPredictionAtNativeWhite"] = hud.presentation?.luminance.text == "≈400 nits est."
                 boostActive = false
                 appliedFactor = 1
                 show()
@@ -102,7 +117,8 @@ enum LuminanceHUDCheck {
                 let result: [String: Any] = ["checks": checks,
                     "allPassed": checks.values.allSatisfy { $0 },
                     "liveReferenceNits": liveNits as Any? ?? NSNull(),
-                    "physicalLuminanceMeasured": false]
+                    "physicalLuminanceMeasured": false, "boostPredictionOpticallyValidated": false,
+                    "boostModelPredictionOnly": true]
                 let output = ProcessInfo.processInfo.environment["HEADROOM_NITS_TEST_OUTPUT"]
                     .map { URL(fileURLWithPath: $0) }
                     ?? Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("hud-check.json")

@@ -115,8 +115,8 @@ final class BoostSession {
         update()
     }
     var detail: String { errorMessage ?? message }
-    /// Read live system SDR white. During boost show HDR capacity separately;
-    /// neither an acknowledged LUT factor nor headroom measures desktop nits.
+    /// Use live native nits and only a helper-acknowledged gain for the model.
+    /// HDR capacity caps the prediction; neither value is an optical measurement.
     var luminance: DisplayLuminance {
         let now = ProcessInfo.processInfo.systemUptime
         if now >= nextLuminanceRead {

@@ -3,7 +3,7 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 swift build --package-path "$project_dir" -c release --triple arm64-apple-macosx13.0 --product Headroom
 binary_dir="$(swift build --package-path "$project_dir" -c release --triple arm64-apple-macosx13.0 --show-bin-path)"
-app="$project_dir/Evidence/nits-build19/NitsHUDCheck.app"
+app="$project_dir/Evidence/nits-build20/NitsHUDCheck.app"
 mkdir -p "$app/Contents/MacOS"
 swiftc -target arm64-apple-macosx13.0 -I "$binary_dir" \
   "$project_dir/Tests/Integration/LuminanceHUD.swift" \

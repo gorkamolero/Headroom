@@ -69,32 +69,61 @@ final class DisplayLuminanceTests: XCTestCase {
         XCTAssertNil(DisplayLuminance(referenceNits: 400.2, appliedFactor: 1.1).nits)
     }
 
-    func testBoostCapacityNeverMasqueradesAsCurrentLuminance() throws {
-        let context = DisplayLuminance.BoostContext(currentHeadroom: 1.2, maximumHDRNits: 1600)
-        for factor in [1.0, 1.1, 1.5, 2.0] {
-            let value = DisplayLuminance(referenceNits: 400, appliedFactor: factor,
-                                        boostActive: true, boostContext: context)
-            XCTAssertNil(value.nits, "Slider position cannot establish emitted luminance")
-            XCTAssertEqual(try XCTUnwrap(value.availableHDRNits), 480, accuracy: 0.000001)
-            XCTAssertEqual(value.text, "HDR ≤480 nits")
-            XCTAssertTrue(value.accessibilityText.contains("capacity"))
-            XCTAssertTrue(value.explanation.contains("not the brightness reached"))
+    func testBoostPredictionUsesExplicitExtendedSRGBHypothesis() throws {
+        // Independently evaluated with 40-digit Decimal arithmetic. These
+        // verify the calculation, not the panel's physical response.
+        for (factor, expected) in [(1.0, 400.2), (1.1, 497.3566662559813),
+                                   (1.2, 607.038342161883), (1.5, 1015.3695268044852)] {
+            let value = DisplayLuminance(referenceNits: 400.2, appliedFactor: factor,
+                boostActive: true, boostContext: .init(currentHeadroom: 4, maximumHDRNits: 1600))
+            XCTAssertEqual(try XCTUnwrap(value.nits), expected, accuracy: 0.000001)
+            XCTAssertEqual(value.availableHDRNits, 1600)
+            XCTAssertTrue(value.isModeledBoost)
+            XCTAssertTrue(value.text.hasSuffix(" nits est."))
+            XCTAssertTrue(value.accessibilityText.contains("Uncalibrated"))
+            XCTAssertTrue(value.explanation.contains("Actual output may differ"))
         }
     }
 
-    func testPreset1600AloneCannotProduce1600CurrentNits() {
-        let value = DisplayLuminance(referenceNits: 400, appliedFactor: 2,
-            boostActive: true, boostContext: .init(currentHeadroom: 1.2, maximumHDRNits: 1600))
-        XCTAssertNil(value.nits)
-        XCTAssertEqual(value.availableHDRNits, 480)
-        XCTAssertFalse(value.text.contains("1600"))
+    func testBoostEstimateIsContinuousAndMonotonicAcrossNativeBoundary() throws {
+        var previous = 0.0
+        for step in 999...2000 {
+            let factor = Double(step) / 1000
+            let value = DisplayLuminance(referenceNits: 400.2, appliedFactor: factor,
+                boostActive: factor >= 1,
+                boostContext: .init(currentHeadroom: 4, maximumHDRNits: 1600))
+            let current = try XCTUnwrap(value.nits)
+            XCTAssertGreaterThanOrEqual(current, previous)
+            XCTAssertLessThanOrEqual(current, 1600)
+            previous = current
+        }
+        let near = DisplayLuminance(referenceNits: 400.2, appliedFactor: 1.000001,
+            boostActive: true, boostContext: .init(currentHeadroom: 4, maximumHDRNits: 1600))
+        XCTAssertEqual(try XCTUnwrap(near.nits), 400.200910408187, accuracy: 0.000001)
     }
 
-    func testCurrentHeadroomNotSliderDeterminesAvailableCapacity() throws {
-        for (headroom, expected) in [(1.0, 400.0), (1.2, 480), (2.0, 800), (3.0, 1200)] {
+    func testCapacityRemainsIndependentOfPredictionAndSliderPosition() throws {
+        for headroom in [3.0, 4.0, 8.0] {
+            let value = DisplayLuminance(referenceNits: 400.2, appliedFactor: 1.2,
+                boostActive: true, boostContext: .init(currentHeadroom: headroom, maximumHDRNits: 1600))
+            XCTAssertEqual(try XCTUnwrap(value.nits), 607.038342161883, accuracy: 0.000001)
+            XCTAssertEqual(try XCTUnwrap(value.availableHDRNits), min(400.2 * headroom, 1600), accuracy: 0.000001)
+        }
+    }
+
+    func testPreset1600AloneCannotProduce1600Estimate() {
+        let value = DisplayLuminance(referenceNits: 400, appliedFactor: 2,
+            boostActive: true, boostContext: .init(currentHeadroom: 1.2, maximumHDRNits: 1600))
+        XCTAssertEqual(value.nits, 480)
+        XCTAssertEqual(value.availableHDRNits, 480)
+        XCTAssertEqual(value.text, "≈480 nits est.")
+    }
+
+    func testFallingCurrentHeadroomCapsPredictionAtNativeWhite() throws {
+        for (headroom, expected) in [(1.0, 400.0), (1.2, 480), (2.0, 800)] {
             let value = DisplayLuminance(referenceNits: 400, appliedFactor: 1.5,
                 boostActive: true, boostContext: .init(currentHeadroom: headroom, maximumHDRNits: 1600))
-            XCTAssertNil(value.nits)
+            XCTAssertEqual(try XCTUnwrap(value.nits), expected, accuracy: 0.000001)
             XCTAssertEqual(try XCTUnwrap(value.availableHDRNits), expected, accuracy: 0.000001)
         }
     }
@@ -103,9 +132,9 @@ final class DisplayLuminanceTests: XCTestCase {
         let value = DisplayLuminance(referenceNits: 350, appliedFactor: 2,
             boostActive: true, boostContext: .init(currentHeadroom: 16,
                 maximumHDRNits: 1600, availablePeakNits: 400 * 2))
-        XCTAssertNil(value.nits)
+        XCTAssertEqual(value.nits, 800)
         XCTAssertEqual(value.availableHDRNits, 800)
-        XCTAssertEqual(value.text, "HDR ≤800 nits")
+        XCTAssertEqual(value.text, "≈800 nits est.")
     }
 
     func testInvalidReportedAvailabilityCannotInflateCapacity() {
@@ -114,17 +143,34 @@ final class DisplayLuminanceTests: XCTestCase {
                 boostActive: true, boostContext: .init(currentHeadroom: 3,
                     maximumHDRNits: 1600, availablePeakNits: available))
             XCTAssertNil(value.availableHDRNits)
+            XCTAssertNil(value.nits)
+        }
+        let inconsistent = DisplayLuminance(referenceNits: 400, appliedFactor: 2,
+            boostActive: true, boostContext: .init(currentHeadroom: 3,
+                maximumHDRNits: 1600, availablePeakNits: 399))
+        XCTAssertNil(inconsistent.nits)
+        XCTAssertFalse(inconsistent.isModeledBoost)
+        XCTAssertEqual(inconsistent.text, "— nits")
+    }
+
+    func testPredictionIsBoundedWithoutIntermediateOverflow() {
+        for headroom in [4.0, 8.0, Double.greatestFiniteMagnitude] {
+            for factor in [2.0, Double.greatestFiniteMagnitude] {
+                let value = DisplayLuminance(referenceNits: 400, appliedFactor: factor,
+                    boostActive: true, boostContext: .init(currentHeadroom: headroom, maximumHDRNits: 1600))
+                XCTAssertEqual(value.nits, 1600)
+                XCTAssertEqual(value.availableHDRNits, 1600)
+                XCTAssertEqual(value.text, "≈1600 nits est.")
+            }
         }
     }
 
-    func testCapacityIsBoundedWithoutOverflow() {
-        for headroom in [4.0, 8.0, Double.greatestFiniteMagnitude] {
-            let value = DisplayLuminance(referenceNits: 400, appliedFactor: 2,
-                boostActive: true, boostContext: .init(currentHeadroom: headroom, maximumHDRNits: 1600))
-            XCTAssertNil(value.nits)
-            XCTAssertEqual(value.availableHDRNits, 1600)
-            XCTAssertEqual(value.text, "HDR ≤1600 nits")
-        }
+    func testZeroNativeReferenceRemainsZeroInBoost() {
+        let value = DisplayLuminance(referenceNits: 0, appliedFactor: 2,
+            boostActive: true, boostContext: .init(currentHeadroom: 4, maximumHDRNits: 1600))
+        XCTAssertEqual(value.nits, 0)
+        XCTAssertEqual(value.availableHDRNits, 0)
+        XCTAssertEqual(value.text, "≈0 nits est.")
     }
 
     func testInvalidCapacityContextIsUnavailable() {

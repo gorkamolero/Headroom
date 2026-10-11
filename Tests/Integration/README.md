@@ -24,7 +24,7 @@ Outputs include `harness-result.json`, `watchdog-result.json`, `harness.log`, an
 
 ## Read-only nits overlay check
 
-Run `bash Tests/Integration/build-luminance.sh`, then open the generated `Evidence/nits-build18/NitsHUDCheck.app`. It does not change display settings or request keyboard permission. It checks the production nits reader, live HUD updates without additional key events, simulated dimming and boost estimates, reduced headroom, dismissal, focus, panel reuse, and unchanged display tables. After four seconds it writes `hud-check.json` beside the app and shows the live native reading for a short visual check before quitting automatically. The dimming and boost samples are calculation tests; they do not measure emitted light.
+Run `bash Tests/Integration/build-luminance.sh`, then open the generated `Evidence/nits-build20/NitsHUDCheck.app`. It does not change display settings or request keyboard permission. It checks the production nits reader, live HUD updates without additional key events, simulated dimming and boost estimates, reduced headroom, dismissal, focus, panel reuse, and unchanged display tables. After four seconds it writes `hud-check.json` beside the app and shows the live native reading for a short visual check before quitting automatically. The dimming and boost samples are calculation tests; they do not measure emitted light.
 
 ## Bounded live nits session
 
