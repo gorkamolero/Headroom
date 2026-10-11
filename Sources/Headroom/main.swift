@@ -21,6 +21,7 @@ final class DisplayRow:NSView {
     static let rowHeight: CGFloat = 90
     let name = NSTextField(labelWithString:"")
     let detail = NSTextField(labelWithString:"")
+    let nits = NSTextField(labelWithString:"")
     let toggle = NSSwitch()
     let slider = NSSlider(value:1,minValue:DisplayAdjustmentRange.minimumFactor,maxValue:2,target:nil,action:nil)
     weak var session: BoostSession?
@@ -39,6 +40,9 @@ final class DisplayRow:NSView {
         detail.font = .systemFont(ofSize:11)
         detail.textColor = .secondaryLabelColor
         detail.lineBreakMode = .byTruncatingTail
+        nits.font = .monospacedDigitSystemFont(ofSize:11,weight:.medium)
+        nits.textColor = .secondaryLabelColor
+        nits.setContentCompressionResistancePriority(.required,for:.horizontal)
         toggle.controlSize = .small
         toggle.target = self;toggle.action = #selector(toggled)
         toggle.setAccessibilityLabel("Brightness adjustment for \(session.screen.localizedName)")
@@ -49,28 +53,35 @@ final class DisplayRow:NSView {
         low.image = NSImage(systemSymbolName:"sun.min",accessibilityDescription:"Dimmer")
         high.image = NSImage(systemSymbolName:"sun.max.fill",accessibilityDescription:"Brighter")
         for icon in [low,high] {icon.contentTintColor = .secondaryLabelColor;icon.imageScaling = .scaleProportionallyDown}
-        for view in [name,detail,toggle,slider,low,high] {view.translatesAutoresizingMaskIntoConstraints = false;addSubview(view)}
+        for view in [name,detail,nits,toggle,slider,low,high] {view.translatesAutoresizingMaskIntoConstraints = false;addSubview(view)}
         NSLayoutConstraint.activate([
             name.leadingAnchor.constraint(equalTo:leadingAnchor,constant:14),name.topAnchor.constraint(equalTo:topAnchor,constant:10),name.trailingAnchor.constraint(lessThanOrEqualTo:toggle.leadingAnchor,constant:-8),
             toggle.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-12),toggle.centerYAnchor.constraint(equalTo:name.centerYAnchor),
-            detail.leadingAnchor.constraint(equalTo:name.leadingAnchor),detail.topAnchor.constraint(equalTo:name.bottomAnchor,constant:3),detail.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-14),
+            detail.leadingAnchor.constraint(equalTo:name.leadingAnchor),detail.topAnchor.constraint(equalTo:name.bottomAnchor,constant:3),detail.trailingAnchor.constraint(lessThanOrEqualTo:nits.leadingAnchor,constant:-8),
+            nits.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-14),nits.centerYAnchor.constraint(equalTo:detail.centerYAnchor),
             low.leadingAnchor.constraint(equalTo:name.leadingAnchor),low.widthAnchor.constraint(equalToConstant:13),low.heightAnchor.constraint(equalToConstant:13),
             high.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-14),high.widthAnchor.constraint(equalToConstant:17),high.heightAnchor.constraint(equalToConstant:17),
             slider.leadingAnchor.constraint(equalTo:low.trailingAnchor,constant:8),slider.trailingAnchor.constraint(equalTo:high.leadingAnchor,constant:-8),slider.topAnchor.constraint(equalTo:detail.bottomAnchor,constant:8),slider.heightAnchor.constraint(equalToConstant:20),
             low.centerYAnchor.constraint(equalTo:slider.centerYAnchor),high.centerYAnchor.constraint(equalTo:slider.centerYAnchor)
         ])
-        refresh()
+        refresh(updateLuminance: true)
     }
     required init?(coder:NSCoder){fatalError()}
     @objc func toggled(){session?.toggle();refresh()}
     @objc func slid(){session?.setLevel(slider.doubleValue)}
-    func refresh(){
+    func refresh(updateLuminance: Bool = false){
         guard let session else{return}
         name.stringValue = session.screen.localizedName
         detail.stringValue = session.message
         detail.toolTip = session.detail
         detail.setAccessibilityValue(session.detail)
         detail.textColor = session.state == .unavailable ? .systemOrange : .secondaryLabelColor
+        if updateLuminance {
+            let luminance = session.luminance
+            nits.stringValue = luminance.text
+            nits.toolTip = luminance.explanation
+            nits.setAccessibilityLabel("Estimated brightness: \(luminance.text)")
+        }
         toggle.state = session.enabled ? .on : .off
         toggle.isEnabled = session.state != .stopping && (session.enabled || session.supportsBoost || session.supportsDimming)
         slider.minValue = session.minimumFactor;slider.maxValue = session.maximumFactor
@@ -102,6 +113,7 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
     let recoveryNotice = NSTextField(wrappingLabelWithString:"")
     lazy var brightnessKeys = BrightnessKeyController { [weak self] in Array(self?.sessions.values ?? [:].values) }
     var keysStatusItem: NSMenuItem?
+    private var menuIsOpen = false
 
     func applicationDidFinishLaunching(_ notification:Notification){
         if let identifier = Bundle.main.bundleIdentifier,
@@ -160,8 +172,8 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         RunLoop.main.perform(inModes:[.default]) {self.show()}
         return false
     }
-    func menuWillOpen(_ menu:NSMenu) {reconcile();print("{\"event\":\"menu-open\"}");fflush(stdout)}
-    func menuDidClose(_ menu:NSMenu) {print("{\"event\":\"menu-close\"}");fflush(stdout)}
+    func menuWillOpen(_ menu:NSMenu) {menuIsOpen = true;reconcile();print("{\"event\":\"menu-open\"}");fflush(stdout)}
+    func menuDidClose(_ menu:NSMenu) {menuIsOpen = false;print("{\"event\":\"menu-close\"}");fflush(stdout)}
     func recoverDisconnectedJournals(){
         guard let dirs = try? FileManager.default.contentsOfDirectory(at:recoveryRoot,includingPropertiesForKeys:nil) else{return}
         var pending = 0
@@ -264,7 +276,7 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         updateState()
     }
     func updateState(){
-        for row in rows.values {row.refresh()}
+        for row in rows.values {row.refresh(updateLuminance: menuIsOpen)}
         let on = sessions.values.filter{$0.enabled}.count
         status?.button?.image = on>0 ? HeadroomIcon.on : HeadroomIcon.off
         status?.button?.toolTip = on>0 ? "Headroom · \(on) display\(on == 1 ? "":"s") on" : "Headroom · off"
@@ -309,9 +321,11 @@ signal(SIGPIPE,SIG_IGN)
 let application = NSApplication.shared
 if CommandLine.arguments.contains("--diagnose-brightness-keys") {
     let reader = NormalBrightnessReader()
+    let luminanceReader = DisplayLuminanceReader()
     let displays: [[String:Any]] = NSScreen.screens.map { screen in
         ["name": screen.localizedName, "builtIn": CGDisplayIsBuiltin(screenID(screen)) != 0,
-         "normalBrightness": reader.brightness(displayID:screenID(screen)).map { $0 as Any } ?? NSNull()]
+         "normalBrightness": reader.brightness(displayID:screenID(screen)).map { $0 as Any } ?? NSNull(),
+         "referenceNits": luminanceReader.referenceNits(displayID:screenID(screen)).map { $0 as Any } ?? NSNull()]
     }
     var tapCount: UInt32 = 0
     var activeTap = false

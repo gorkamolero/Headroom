@@ -426,6 +426,9 @@ final class BrightnessKeyController {
         hud.show(screen: session.screen, presentation: BrightnessHUDPresentation(
             title: factor < 1 ? "Display −" : factor > 1 ? "Display +" : "Display",
             level: min(1, max(0, level)), lowerBoundary: nativeBottom > 0 ? nativeBottom : nil,
-            upperBoundary: nativeTop < 1 ? nativeTop : nil))
+            upperBoundary: nativeTop < 1 ? nativeTop : nil, luminance: session.luminance),
+            readLuminance: { [weak session] in
+                session?.luminance ?? DisplayLuminance(referenceNits: nil, appliedFactor: 1)
+            })
     }
 }

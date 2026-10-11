@@ -1,6 +1,6 @@
 # Apple sources
 
-Reviewed on 10 October 2026. Headroom is independently implemented with Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no Lunar code or assets are included. Release 0.4.0 uses no private macOS APIs. The local 0.5.0 candidate isolates one private integration in a compatibility adapter: reading and setting native hardware brightness. Its Display + overlay uses public AppKit and SwiftUI controls.
+Reviewed on 11 October 2026. Headroom is independently implemented with Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no Lunar code or assets are included. Release 0.4.0 uses no private macOS APIs. The local 0.5.0 candidate isolates private integrations in two compatibility adapters: native-brightness control and read-only nits reporting. Its brightness overlay uses public AppKit and SwiftUI controls.
 
 ## Display behavior
 
@@ -27,11 +27,19 @@ Apple DTS [reproduced successful transfer-table writes and matching readback wit
 
 For supported displays, Headroom owns the normal keyboard range as well as both extra ranges. Holding Down reduces native brightness to 0.01 before entering software dimming; holding Up reaches native maximum before entering boost. The 0.01 hardware floor is a slider setting, not a physical luminance percentage. Up from hardware zero raises native brightness; Down leaves zero unchanged. The existing transfer-table and recovery path supplies both extra ranges. Extra dimming scales the saved baseline downward to a minimum factor of 0.1 and does not activate the HDR carrier. This factor is not a measured luminance ratio. Quit restores temporary color-table changes while preserving the user's selected hardware-brightness level.
 
-Headroom's single Display + overlay covers supported adjustments across all three ranges. It uses [NSGlassEffectView](https://developer.apple.com/documentation/appkit/nsglasseffectview) and a native SwiftUI [Slider](https://developer.apple.com/documentation/swiftui/slider) on macOS 26 or later, with [NSVisualEffectView](https://developer.apple.com/documentation/appkit/nsvisualeffectview) for older systems. It is Headroom's own panel built with Apple controls, not Apple's system banner. The bar represents a control position, not measured luminance.
+Headroom's single overlay labels the three supported ranges Display −, Display, and Display +. It uses [NSGlassEffectView](https://developer.apple.com/documentation/appkit/nsglasseffectview) and a native SwiftUI [Slider](https://developer.apple.com/documentation/swiftui/slider) on macOS 26 or later, with [NSVisualEffectView](https://developer.apple.com/documentation/appkit/nsvisualeffectview) for older systems. It is Headroom's own panel built with Apple controls, not Apple's system banner. The bar represents a control position, not measured luminance.
 
 On the test Mac, Control Center explicitly ignored legacy OSD requests; reaching its service did not establish a visible indicator. The direct modern banner interface required Apple's private system-banner client entitlement and refused Headroom's probe. Headroom does not change that restriction or use either route. See [validation](VALIDATION.md) for the probe evidence and current overlay checks.
 
 Accessibility approval and an enabled brightness-only session tap were verified for an earlier candidate GUI. A separate shell-launched diagnostic was attributed to Codex and reported its own untrusted context; it did not describe the GUI's permission state. Build-specific results and remaining live checks are recorded in [VALIDATION.md](VALIDATION.md).
+
+## Nits readout — local build 17
+
+- Apple's [Display P3 documentation](https://developer.apple.com/documentation/coregraphics/cgcolorspace/displayp3) specifies an sRGB transfer function. Headroom uses its inverse as an explicit assumption when estimating SDR-white luminance after confirmed software dimming; this does not establish the physical response of a transfer-table write.
+- `DisplayServicesGetLinearBrightness` is private. Its C signature was checked against Lunar's published [bridging declarations](https://github.com/alin23/Lunar/blob/master/Lunar/DDC/Lunar-Bridging-Header.h#L37-L70); Lunar's [native-control implementation](https://github.com/alin23/Lunar/blob/master/Lunar/Control/AppleNativeControl.swift#L206-L221) documents the reference calculation from linear brightness and SDR maximum. Headroom implements its own read-only adapter and numeric validation.
+- MonitorPanel's `MPDisplayMgr`, active-preset getters, method signatures, and `PresetMaxSDRLuminance` dictionary entry were inspected independently on the test Mac. They are private implementation details with no public Apple contract. Headroom validates getter signatures, checks a nonblocking manager lock, and returns unavailable if they cannot be used.
+
+The displayed **≈** value is calculated, not measured with a light meter. It uses the active preset's SDR maximum, without a hardcoded model maximum or HDR fallback. Boost, unknown readings, and unsettled session states display **— nits**; neither EDR ratios nor table multipliers are treated as measured brightness gains. See the [method](docs/METHOD.md#estimated-nits--local-build-17).
 
 ## Lifecycle and distribution
 

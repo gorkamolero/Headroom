@@ -1,7 +1,9 @@
-# Headroom 0.5.0 — local candidate, build 16
+# Headroom 0.5.0 — local candidate, build 17
+
+- Added a live **≈ nits** estimate at the upper right of the brightness overlay and in each display's menu controls. It uses the Mac's linear brightness reading and that display's active SDR preset maximum. Extra dimming includes an explicitly assumed sRGB response to confirmed table changes. Unsupported readings, boost, preparation, restoration, and pending recovery display **— nits**. These are calculated estimates, not physical light-meter measurements.
 
 - Kept all 17 ticks on one evenly spaced grid. Only ticks 2 and 14 are taller; the visual range boundaries align with those same ticks.
-- Removed duplicate boundary marks: the bar now has a single set of ticks, with the existing boundary graduations slightly taller. Build 16 is installed locally; the public 0.4.0 release is unchanged.
+- Removed duplicate boundary marks: the bar now has a single set of ticks, with the existing boundary graduations slightly taller. The public 0.4.0 release is unchanged.
 
 - The indicator now says **Display −**, **Display**, or **Display +** for extra dimming, normal brightness, and boost. Small vertical notches mark the two boundaries. Held keys pause for 350 ms at a confirmed boundary, then continue; release/repress or reversing direction skips the pause.
 
@@ -14,7 +16,7 @@
 - One native-style overlay across all supported ranges, built with Apple's glass and slider controls on macOS 26 or later, with a compatible vibrancy panel on older systems. White bar, tick marks, and sun icons; automatic fade and no percentage or multiplier label.
 - Accessibility is requested only for key control. Keys target the built-in display, or the primary display on a desktop Mac, and pause while Lunar is running.
 - Handles both system-defined brightness events and alternate brightness keycodes 144/145, including held keys and releases. Ordinary keys pass through unchanged.
-- One isolated private adapter reads and sets native brightness with DisplayServices, validates levels, and checks write/readback results. It does not change automatic brightness. If native control is unavailable, ordinary keys fall back to macOS. The overlay uses public controls because the tested system-banner interfaces are unavailable to Headroom.
+- Two isolated private adapters provide native-brightness control and read-only nits reporting. Native writes validate levels and check readback. The nits adapter uses DisplayServices and runtime-checked MonitorPanel getters with a nonblocking lock; unavailable APIs return no estimate. Neither adapter changes automatic brightness. If native control is unavailable, ordinary keys fall back to macOS. The overlay uses public controls because the tested system-banner interfaces are unavailable to Headroom.
 - Disable and quit restore the original color tables. Hardware brightness selected with the keys remains at its last setting.
 
 Build-specific test, installation, and visual results are recorded in [VALIDATION.md](../VALIDATION.md). Physical-key repetition and the restoration handoff remain separate live checks. This candidate has not replaced the public 0.4.0 download.

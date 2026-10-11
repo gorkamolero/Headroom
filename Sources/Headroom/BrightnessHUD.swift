@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import DisplayCore
 
 struct BrightnessHUDPresentation {
     static let lowerRangeBoundary = 2.0 / 16
@@ -8,6 +9,7 @@ struct BrightnessHUDPresentation {
     let level: Double
     let lowerBoundary: Double?
     let upperBoundary: Double?
+    var luminance = DisplayLuminance(referenceNits: nil, appliedFactor: 1)
 }
 
 /// A nonactivating display indicator made from Apple's slider and glass controls.
@@ -16,26 +18,33 @@ final class BrightnessHUD {
     private let state = BrightnessHUDState()
     private var panel: BrightnessHUDPanel?
     private var dismissal: Timer?
+    private var luminanceTimer: Timer?
+    private var readLuminance: (() -> DisplayLuminance)?
     private var presentationGeneration = 0
     private(set) var presentation: BrightnessHUDPresentation?
 
-    func show(screen: NSScreen, presentation: BrightnessHUDPresentation) {
+    func show(screen: NSScreen, presentation: BrightnessHUDPresentation,
+              readLuminance: (() -> DisplayLuminance)? = nil) {
         guard presentation.level.isFinite else { return }
+        self.readLuminance = readLuminance
         present(screen: screen, presentation: presentation, duration: 1.5)
     }
 
     /// Displays the production view without changing brightness or starting a session.
-    func showPreview(screen: NSScreen, level: Double, duration: TimeInterval = 30) {
+    func showPreview(screen: NSScreen, level: Double, duration: TimeInterval = 30,
+                     luminance: DisplayLuminance = DisplayLuminance(referenceNits: nil, appliedFactor: 1)) {
         guard level.isFinite, duration.isFinite else { return }
+        readLuminance = nil
         present(screen: screen, presentation: BrightnessHUDPresentation(title: "Display", level: level,
             lowerBoundary: BrightnessHUDPresentation.lowerRangeBoundary,
-            upperBoundary: BrightnessHUDPresentation.upperRangeBoundary), duration: max(0.1, duration))
+            upperBoundary: BrightnessHUDPresentation.upperRangeBoundary, luminance: luminance), duration: max(0.1, duration))
     }
 
     func hide() {
         presentationGeneration += 1
         dismissal?.invalidate()
         dismissal = nil
+        stopLuminanceUpdates()
         panel?.orderOut(nil)
     }
 
@@ -55,9 +64,20 @@ final class BrightnessHUD {
             panel.animator().alphaValue = 1
         }
         panel.orderFrontRegardless()
+        if readLuminance != nil, luminanceTimer == nil {
+            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+                guard let self, let read = self.readLuminance, var current = self.presentation else { return }
+                current.luminance = read()
+                self.presentation = current
+                self.state.presentation = current
+            }
+            luminanceTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        }
         let timer = Timer(timeInterval: duration, repeats: false) { [weak self] _ in
             guard let self, self.presentationGeneration == currentPresentation else { return }
             self.dismissal = nil
+            self.stopLuminanceUpdates()
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18
                 panel.animator().alphaValue = 0
@@ -114,7 +134,13 @@ final class BrightnessHUD {
         self.panel = panel
     }
 
-    deinit { dismissal?.invalidate() }
+    private func stopLuminanceUpdates() {
+        luminanceTimer?.invalidate()
+        luminanceTimer = nil
+        readLuminance = nil
+    }
+
+    deinit { dismissal?.invalidate(); luminanceTimer?.invalidate() }
 }
 
 private final class BrightnessHUDPanel: NSPanel {
@@ -147,6 +173,13 @@ private struct BrightnessHUDContent: View {
                 .foregroundStyle(.white)
                 .frame(width: 130, alignment: .leading)
                 .position(x: 79, y: 17.5)
+            Text(state.presentation.luminance.text)
+                .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.85))
+                .frame(width: 124, alignment: .trailing)
+                .position(x: 214, y: 17.5)
+                .help(state.presentation.luminance.explanation)
+                .accessibilityLabel(state.presentation.luminance.text)
             Image(systemName: "sun.min.fill")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.white)

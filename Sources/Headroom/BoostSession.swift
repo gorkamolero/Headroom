@@ -33,6 +33,10 @@ final class BoostSession {
     private var nextRenew: TimeInterval = 0
     private var nextReadback: TimeInterval = 0
     private var appliedFactor = 1.0
+    private var confirmedFactor: Double?
+    private let luminanceReader: any DisplayLuminanceReading
+    private var referenceNits: Double?
+    private var nextLuminanceRead = -Double.infinity
     private var pendingSet = false
     private var levelTimer: Timer?
     private var beginSent = false
@@ -60,7 +64,9 @@ final class BoostSession {
     var busy: Bool { child != nil || state == .preparing || state == .on || state == .stopping }
     var enabled: Bool { state == .on || state == .preparing }
 
-    init(screen: NSScreen, identity: DisplayIdentity, directory: URL) {
+    init(screen: NSScreen, identity: DisplayIdentity, directory: URL,
+         luminanceReader: any DisplayLuminanceReading = DisplayLuminanceReader()) {
+        self.luminanceReader = luminanceReader
         self.screen = screen; uuid = identity.uuid; self.directory = directory
         // The ceiling is a tested input range, not a measured nit ratio.
         maximumFactor = Self.ceiling(for: screen)
@@ -109,6 +115,24 @@ final class BoostSession {
         update()
     }
     var detail: String { errorMessage ?? message }
+    /// Read the actual native brightness, then apply only a confirmed dimming
+    /// factor. Requested/queued values are never presented as display readback.
+    var luminance: DisplayLuminance {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now >= nextLuminanceRead {
+            referenceNits = luminanceReader.referenceNits(displayID: screenID(screen))
+            nextLuminanceRead = now + 0.1
+        }
+        switch state {
+        case .off:
+            return DisplayLuminance(referenceNits: referenceNits, appliedFactor: 1)
+        case .on:
+            return DisplayLuminance(referenceNits: referenceNits,
+                appliedFactor: confirmedFactor ?? .nan, boostActive: !isDimming)
+        case .preparing, .stopping, .unavailable:
+            return DisplayLuminance(referenceNits: nil, appliedFactor: 1)
+        }
+    }
     private func update() { changed?() }
     func toggle() {
         if enabled {stop(reason:"Off")}
@@ -169,6 +193,7 @@ final class BoostSession {
         activeDimming = dimming
         token = UUID(); let attempt = token
         errorMessage = nil; stopMessage = nil; beginSent = false; pendingSet = false
+        confirmedFactor = nil
         state = .preparing; message = dimming ? "Preparing dimming…" : "Preparing brightness…"
         deadline = ProcessInfo.processInfo.systemUptime + 12
         do {
@@ -270,10 +295,13 @@ final class BoostSession {
                 beginSent = true;appliedFactor = allowedFactor();lastRequestedFactor = appliedFactor
                 send(["command":"begin","displayID":screenID(screen),"displayUUID":uuid,"factor":appliedFactor,"duration":30,"renewable":true])
             } else if event == "began" && ok && state == .preparing {
+                confirmedFactor = (record["factor"] as? NSNumber)?.doubleValue ?? lastRequestedFactor
                 state = .on;message = isDimming ? "Dimming" : "Boosting";nextRenew = ProcessInfo.processInfo.systemUptime + 10;nextReadback = 0;update()
                 if pendingSet { scheduleLevelUpdate() }
             } else if event == "set" && ok {
                 appliedFactor = (record["factor"] as? NSNumber)?.doubleValue ?? lastRequestedFactor
+                confirmedFactor = (record["factor"] as? NSNumber)?.doubleValue
+                update()
             } else if event == "ended" {
                 if !ok {
                     errorMessage = record["message"] as? String ?? "Restoration needs attention."

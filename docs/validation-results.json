@@ -602,7 +602,7 @@
     "automatedTestsPassed": 88,
     "boundaryPauseSeconds": 0.35,
     "hudTitles": [
-      "Display −",
+      "Display \u2212",
       "Display",
       "Display +"
     ],
@@ -623,12 +623,12 @@
         "repeatEventsDuringPause": 14
       },
       {
-        "finalTitle": "Display −",
+        "finalTitle": "Display \u2212",
         "labelPassed": true,
         "labelsSeen": [
           "Display",
           "Display +",
-          "Display −"
+          "Display \u2212"
         ],
         "longestHandlerSeconds": 2.745829988270998e-05,
         "markersPassed": true,
@@ -642,7 +642,7 @@
         "labelPassed": true,
         "labelsSeen": [
           "Display",
-          "Display −"
+          "Display \u2212"
         ],
         "longestHandlerSeconds": 1.9249971956014633e-05,
         "markersPassed": true,
@@ -737,5 +737,40 @@
       "maximumDeviationFromUniformGridPixels": 0.5,
       "passed": true
     }
+  },
+  "candidate050Build17": {
+    "recordedDate": "2026-10-11",
+    "scope": "Live estimated nits readout; installed local candidate, existing key permission refresh pending macOS authentication.",
+    "unitTestsPassed": 99,
+    "nitsUnitTestsPassed": 11,
+    "liveReferenceNits": 400.2000331878662,
+    "adapterReadSample": {
+      "successful": 100,
+      "total": 100,
+      "meanMilliseconds": 0.744
+    },
+    "physicalLuminanceMeasured": false,
+    "dimmingEstimateResponse": "assumed inverse sRGB; acknowledged table factor only",
+    "boostEstimateAvailable": false,
+    "readOnlyHUDChecks": {
+      "autoDismissed": true,
+      "clickThrough": true,
+      "dimmingEstimateUpdates": true,
+      "dismissedStopsPolling": true,
+      "displayTablesUnchanged": true,
+      "doesNotTakeFocus": true,
+      "hiddenStopsPolling": true,
+      "invalidDisplayUnavailable": true,
+      "nativeReadout": true,
+      "panelReused": true,
+      "updatesWithoutAnotherKeyEvent": true,
+      "visible": true
+    },
+    "productionHUDVisuallyInspected": true,
+    "independentIntegrationReviewPassed": true,
+    "releaseBuildAndDeepStrictSignaturePassed": true,
+    "installedBuild": 17,
+    "runningInstalledKeyTapEnabled": false,
+    "permissionRefresh": "Pending macOS authentication to refresh the existing grant."
   }
 }
