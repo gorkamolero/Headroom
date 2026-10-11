@@ -687,7 +687,12 @@
     "previewVisuallyInspected": true,
     "releaseBuildAndDeepStrictSignaturePassed": true,
     "installedBuild": 14,
-    "runningKeyTapEnabled": false,
-    "permissionRefresh": "Awaiting the user at the macOS Touch ID prompt."
+    "runningKeyTapEnabled": true,
+    "permissionRefresh": "Existing Headroom Accessibility grant refreshed through System Settings after user authentication; running installed GUI event tap confirmed enabled.",
+    "installedRuntime": {
+      "nativeBrightness": 0.7499998807907104,
+      "gammaAdjustment": "off",
+      "note": "The current native brightness was preserved; no saved boost was re-enabled after the user changed the native setting during authentication."
+    }
   }
 }
