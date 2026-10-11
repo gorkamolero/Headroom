@@ -696,7 +696,7 @@
     }
   },
   "candidate050Build15": {
-    "scope": "Visual-only correction, staged locally. Installed build14 remains running at the user request to avoid further permission prompts.",
+    "scope": "Build15 was installed and its active key tap verified; build16 supersedes it to correct the unequal tick spacing.",
     "tickCount": 17,
     "boundaryTickWidthPoints": 2,
     "ordinaryTickHeightPoints": 8,
@@ -705,8 +705,37 @@
     "productionViewVisuallyInspected": true,
     "releaseBuildAndDeepStrictSignaturePassed": true,
     "brightnessControllerChanged": false,
-    "installedBuild": 14,
+    "installedBuild": 15,
     "runningInstalledKeyTapEnabled": true,
-    "newPermissionPromptsOpened": false
+    "newPermissionPromptsOpened": true,
+    "permissionRefresh": "Completed through System Settings; installed GUI key tap verified enabled."
+  },
+  "candidate050Build16": {
+    "scope": "Even tick spacing correction installed locally; existing Accessibility refresh in progress.",
+    "tickCount": 17,
+    "normalizedTickInterval": 0.0625,
+    "tallerTickIndices": [
+      2,
+      14
+    ],
+    "visualRangeBoundaries": [
+      0.125,
+      0.875
+    ],
+    "tickHeightPoints": {
+      "ordinary": 8,
+      "boundary": 12
+    },
+    "productionViewVisuallyInspected": true,
+    "independentSpacingAndEndpointReviewPassed": true,
+    "releaseBuildAndDeepStrictSignaturePassed": true,
+    "brightnessControlBehaviorChanged": false,
+    "installedBuild": 16,
+    "runningInstalledKeyTapEnabled": false,
+    "renderedPixelGridCheck": {
+      "tickCount": 17,
+      "maximumDeviationFromUniformGridPixels": 0.5,
+      "passed": true
+    }
   }
 }

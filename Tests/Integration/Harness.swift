@@ -335,8 +335,8 @@ private final class Trial {
         // resolves the plateau to 20 ms, with scheduling/readback tolerance.
         let pausePassed = measuredPause.map { $0 >= 0.30 } == true
         let labels = Set(samples.compactMap { $0["hudTitle"] as? String })
-        let expectedUpper: Double? = session.supportsBoost ? 0.85 : nil
-        let markersPassed = finalPresentation?.lowerBoundary == 0.15
+        let expectedUpper: Double? = session.supportsBoost ? 0.875 : nil
+        let markersPassed = finalPresentation?.lowerBoundary == 0.125
             && finalPresentation?.upperBoundary == expectedUpper
         let labelPassed = labels.contains("Display") && finalPresentation?.title == finalTitle
         checks.append(["name": name + "-boundary-assertions", "pausePassed": pausePassed,

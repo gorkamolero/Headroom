@@ -410,8 +410,9 @@ final class BrightnessKeyController {
         guard let current = snapshot, current.session === session, current.nativeAvailable else { return }
         let normal = current.normal ?? 0
         let factor = current.state == .on || current.state == .preparing ? current.factor : 1
-        let nativeBottom = current.dimmingAvailable ? 0.15 : 0
-        let nativeTop = current.available && current.ceiling > 1.01 ? 0.85 : 1.0
+        let nativeBottom = current.dimmingAvailable ? BrightnessHUDPresentation.lowerRangeBoundary : 0
+        let nativeTop = current.available && current.ceiling > 1.01
+            ? BrightnessHUDPresentation.upperRangeBoundary : 1.0
         let level: Double
         if factor < 1 {
             level = nativeBottom * (factor - session.minimumFactor) / (1 - session.minimumFactor)

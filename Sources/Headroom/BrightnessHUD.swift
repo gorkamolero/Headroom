@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 struct BrightnessHUDPresentation {
+    static let lowerRangeBoundary = 2.0 / 16
+    static let upperRangeBoundary = 14.0 / 16
     let title: String
     let level: Double
     let lowerBoundary: Double?
@@ -26,7 +28,8 @@ final class BrightnessHUD {
     func showPreview(screen: NSScreen, level: Double, duration: TimeInterval = 30) {
         guard level.isFinite, duration.isFinite else { return }
         present(screen: screen, presentation: BrightnessHUDPresentation(title: "Display", level: level,
-            lowerBoundary: 0.15, upperBoundary: 0.85), duration: max(0.1, duration))
+            lowerBoundary: BrightnessHUDPresentation.lowerRangeBoundary,
+            upperBoundary: BrightnessHUDPresentation.upperRangeBoundary), duration: max(0.1, duration))
     }
 
     func hide() {
@@ -127,16 +130,13 @@ private final class BrightnessHUDState: ObservableObject {
 private struct BrightnessHUDContent: View {
     @ObservedObject var state: BrightnessHUDState
 
-    // Keep one set of graduations. The boundary replaces its nearest ordinary
-    // tick; adding a separate mark beside a system tick creates a double line.
+    // Every tick stays on the same grid. Boundaries change height only.
     private var ticks: [(position: Double, isBoundary: Bool)] {
         let boundaries = [state.presentation.lowerBoundary, state.presentation.upperBoundary]
             .compactMap { $0 }.filter { $0.isFinite && $0 > 0 && $0 < 1 }
         return (0...16).map { index in
-            if let boundary = boundaries.first(where: { Int(($0 * 16).rounded()) == index }) {
-                return (boundary, true)
-            }
-            return (Double(index) / 16, false)
+            let position = Double(index) / 16
+            return (position, boundaries.contains(position))
         }
     }
 
