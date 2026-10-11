@@ -1,6 +1,6 @@
 # Apple sources
 
-Reviewed on 10 October 2026. Headroom is independently implemented with Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no Lunar code or assets are included. Release 0.4.0 uses no private macOS APIs. The local 0.5.0 candidate isolates two private integrations behind compatibility adapters: reading normal brightness and drawing macOS's own brightness indicator.
+Reviewed on 10 October 2026. Headroom is independently implemented with Apple frameworks, its own generated HDR sample, documentation, and local experiments. Reference-app behavior was inspected during research; no Lunar code or assets are included. Release 0.4.0 uses no private macOS APIs. The local 0.5.0 candidate isolates two private integrations behind compatibility adapters: reading normal brightness and requesting Apple's system Display overlay.
 
 ## Display behavior
 
@@ -23,9 +23,9 @@ Apple DTS [reproduced successful transfer-table writes and matching readback wit
 
 `NormalBrightnessReader` dynamically resolves `DisplayServicesGetBrightness` to read normal display brightness and decide whether an extra Up press can start boost. This function is private and has no public Apple API contract. Failed reads prevent automatic entry into boost. Headroom does not call a native brightness setter or override automatic brightness. The existing transfer-table and recovery path supplies the boost.
 
-`NativeBrightnessOSD` dynamically loads the private OSD framework and validates the `OSDManager` runtime method signatures before requesting macOS's brightness indicator. This integration only draws the indicator; it does not set brightness. Missing or incompatible methods leave the indicator unavailable, with no custom panel fallback. The bar represents Headroom's boost range, not measured luminance. These private integrations are independently implemented, and neither has a supported public Apple API contract.
+`NativeBrightnessOSD` dynamically loads the private OSD framework and validates the `OSDManager` runtime method signatures before requesting Apple's system Display overlay. macOS renders the indicator and controls its appearance. Missing or incompatible methods leave the indicator unavailable; no custom panel is substituted. The bar represents a control position, not measured luminance. Both private adapters are independently implemented and have no supported public Apple API contract. A bounded probe on macOS 27 reached Control Center's `com.apple.SystemBanner` service; that routing evidence is distinct from a visual comparison or a physical-key test.
 
-Accessibility approval and an enabled brightness-only session tap were verified for the running GUI. A separate shell-launched diagnostic was attributed to Codex and reported its own untrusted context; it did not describe the GUI's permission state. Physical key repetition, restoration handoff and the visible native indicator still need end-to-end validation.
+Accessibility approval and an enabled brightness-only session tap were verified for an earlier candidate GUI. A separate shell-launched diagnostic was attributed to Codex and reported its own untrusted context; it did not describe the GUI's permission state. Build-specific results and remaining live checks are recorded in [VALIDATION.md](VALIDATION.md).
 
 ## Lifecycle and distribution
 

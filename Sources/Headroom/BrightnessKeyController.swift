@@ -215,7 +215,22 @@ final class BrightnessKeyController {
         default: break
         }
         snapshot = current
-        guard action != .consume else { return true }
+        if action == .consume {
+            // A key at the ceiling should still show feedback, even after the
+            // previous overlay faded. Keep UI work outside the tap callback.
+            if current.state == .on || current.state == .preparing {
+                let epoch = generation
+                let session = current.session
+                RunLoop.main.perform(inModes: [.common]) { [weak self, weak session] in
+                    guard let self, let session, epoch == self.generation,
+                          session.enabled else { return }
+                    self.hud.show(screen: session.screen, factor: session.desiredFactor,
+                                  maximum: session.maximumFactor,
+                                  preparing: session.state == .preparing)
+                }
+            }
+            return true
+        }
         // Coalesce repeated set requests without ever reordering start or stop.
         if case .set = action, let last = pending.last, case .set = last.1,
            last.0 === current.session { pending[pending.count - 1] = (current.session, action) }

@@ -34,15 +34,15 @@ The app currently targets **Apple Silicon and macOS 13 or later**. Live testing 
 
 ### Next beta: brightness keys
 
-The local 0.5.0 candidate adds **Use Brightness Keys** to the menu. This is not included in the public 0.4.0 download. Enable it and allow Headroom in **System Settings → Privacy & Security → Accessibility** to control boost with the keyboard:
+The local 0.5.0 candidate (build 8) adds **Use Brightness Keys** to the menu. This is not included in the public 0.4.0 download. Enable it and allow Headroom in **System Settings → Privacy & Security → Accessibility** to control boost with the keyboard:
 
 - **Brighter:** normal brightness works as usual. At maximum, release the key and press Up again to enter boost. Holding Up from below maximum does not accidentally cross into boost.
 - **Dimmer:** Down reduces boost, restores normal display settings at the boundary, then continues through macOS's normal brightness range.
 - **Smaller steps:** hold **Option + Shift** while pressing a brightness key.
 
-The candidate uses **macOS's own brightness indicator**. In boost, its bar represents the position within Headroom's extra range; returning to normal shows the normal maximum before macOS resumes ordinary key handling. The bar does not measure brightness or nits. There is no custom overlay fallback if the native indicator is unavailable.
+Boost adjustments request **Apple's system Display overlay**. macOS supplies its appearance and fade; Headroom supplies the bar position without adding a percentage or multiplier label. The bar represents a control position, not measured nits. There is no custom fallback if the system indicator is unavailable. Ordinary brightness keys remain under macOS control.
 
-Keys target the built-in display when connected, otherwise the primary display; the per-display menu switches and sliders remain available. Keyboard control pauses while Lunar is running; Headroom never quits it for you. Accessibility approval and installation of the brightness-only event tap have been verified on the test Mac. Physical-key repetition, the boundary handoff and the native indicator still need end-to-end validation.
+Keys target the built-in display when connected, otherwise the primary display; the per-display menu switches and sliders remain available. Keyboard control pauses while Lunar is running; Headroom never quits it for you. Physical-key repetition and the boundary handoff remain separate live checks. See the [validation record](VALIDATION.md) for results by build.
 
 ## Designed to restore your display
 

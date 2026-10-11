@@ -1,6 +1,7 @@
 import AppKit
 
-/// Uses macOS's own brightness indicator. The menu holds status and error text.
+/// macOS draws the indicator, including the current system's glass, symbols,
+/// typography and animation. Status and errors remain in Headroom's menu.
 final class BrightnessHUD {
     private let indicator = NativeBrightnessOSD()
 
@@ -10,14 +11,14 @@ final class BrightnessHUD {
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
             return
         }
-        // Boost uses a fresh range above normal maximum. Leaving boost shows
-        // normal maximum before the system resumes ordinary brightness keys.
-        let level = factor > 1 && maximum > 1 ? (factor - 1) / (maximum - 1) : 1
-        indicator.show(displayID: number.uint32Value, level: level)
+        // Keep downward movement continuous through the end of boost. This is
+        // a control position, not a luminance measurement. Native-range keys
+        // subsequently let macOS update this same indicator on its own scale.
+        indicator.show(displayID: number.uint32Value, level: factor / max(1, maximum))
     }
 
     func hide() {
-        // macOS fades its own indicator. A global hide could dismiss the
-        // indicator belonging to a subsequent, ordinary brightness-key event.
+        // macOS owns the lifetime. Globally hiding the system indicator could
+        // dismiss feedback from a subsequent native brightness-key event.
     }
 }
