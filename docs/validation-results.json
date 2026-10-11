@@ -740,7 +740,7 @@
   },
   "candidate050Build17": {
     "recordedDate": "2026-10-11",
-    "scope": "Live estimated nits readout; installed local candidate, existing key permission refresh pending macOS authentication.",
+    "scope": "Live estimated nits readout; installed local candidate with the running GUI brightness-key tap verified enabled.",
     "unitTestsPassed": 99,
     "nitsUnitTestsPassed": 11,
     "liveReferenceNits": 400.2000331878662,
@@ -770,7 +770,7 @@
     "independentIntegrationReviewPassed": true,
     "releaseBuildAndDeepStrictSignaturePassed": true,
     "installedBuild": 17,
-    "runningInstalledKeyTapEnabled": false,
-    "permissionRefresh": "Pending macOS authentication to refresh the existing grant."
+    "runningInstalledKeyTapEnabled": true,
+    "permissionRefresh": "Completed through System Settings after macOS authentication; running GUI key tap verified enabled."
   }
 }
