@@ -711,7 +711,7 @@
     "permissionRefresh": "Completed through System Settings; installed GUI key tap verified enabled."
   },
   "candidate050Build16": {
-    "scope": "Even tick spacing correction installed locally; existing Accessibility refresh in progress.",
+    "scope": "Even tick spacing correction installed and running locally; existing Accessibility grant refreshed and live GUI key tap verified.",
     "tickCount": 17,
     "normalizedTickInterval": 0.0625,
     "tallerTickIndices": [
@@ -731,7 +731,7 @@
     "releaseBuildAndDeepStrictSignaturePassed": true,
     "brightnessControlBehaviorChanged": false,
     "installedBuild": 16,
-    "runningInstalledKeyTapEnabled": false,
+    "runningInstalledKeyTapEnabled": true,
     "renderedPixelGridCheck": {
       "tickCount": 17,
       "maximumDeviationFromUniformGridPixels": 0.5,
