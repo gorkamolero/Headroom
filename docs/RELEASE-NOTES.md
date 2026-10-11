@@ -1,4 +1,6 @@
-# Headroom 0.5.0 — local candidate, build 14
+# Headroom 0.5.0 — local candidate, build 15
+
+- Removed duplicate boundary marks: the bar now has a single set of ticks, with the existing boundary graduations slightly taller. Build 15 is staged locally; the installed build 14 remains running to avoid another permission refresh tonight.
 
 - The indicator now says **Display −**, **Display**, or **Display +** for extra dimming, normal brightness, and boost. Small vertical notches mark the two boundaries. Held keys pause for 350 ms at a confirmed boundary, then continue; release/repress or reversing direction skips the pause.
 

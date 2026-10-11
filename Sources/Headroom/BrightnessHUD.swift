@@ -126,7 +126,19 @@ private final class BrightnessHUDState: ObservableObject {
 
 private struct BrightnessHUDContent: View {
     @ObservedObject var state: BrightnessHUDState
-    private let ticks = Array(stride(from: 0.0, through: 1.0, by: 1.0 / 16))
+
+    // Keep one set of graduations. The boundary replaces its nearest ordinary
+    // tick; adding a separate mark beside a system tick creates a double line.
+    private var ticks: [(position: Double, isBoundary: Bool)] {
+        let boundaries = [state.presentation.lowerBoundary, state.presentation.upperBoundary]
+            .compactMap { $0 }.filter { $0.isFinite && $0 > 0 && $0 < 1 }
+        return (0...16).map { index in
+            if let boundary = boundaries.first(where: { Int(($0 * 16).rounded()) == index }) {
+                return (boundary, true)
+            }
+            return (Double(index) / 16, false)
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -144,14 +156,11 @@ private struct BrightnessHUDContent: View {
                 .controlSize(.small)
                 .frame(width: 225, height: 22)
                 .overlay(alignment: .topLeading) {
-                    // Subtle notches project three points above and below the
-                    // four-point native track, marking the two range detents.
-                    ForEach([state.presentation.lowerBoundary, state.presentation.upperBoundary]
-                        .compactMap { $0 }.filter { $0 > 0 && $0 < 1 }, id: \.self) { boundary in
-                        Capsule()
-                            .fill(.white.opacity(0.6))
-                            .frame(width: 1, height: 10)
-                            .position(x: 225 * boundary, y: 10)
+                    ForEach(ticks.indices, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 0.5)
+                            .fill(.white.opacity(0.4))
+                            .frame(width: 2, height: ticks[index].isBoundary ? 12 : 8)
+                            .position(x: 1 + 223 * ticks[index].position, y: 11)
                             .accessibilityHidden(true)
                     }
                 }
@@ -170,12 +179,8 @@ private struct BrightnessHUDContent: View {
 
     @ViewBuilder private var slider: some View {
         if #available(macOS 26, *) {
-            Slider(value: .constant(min(1, max(0, state.presentation.level)))) {} ticks: {
-                SliderTickContentForEach(ticks, id: \.self) { value in
-                    SliderTick(value)
-                }
-            }
-            .sliderThumbVisibility(.hidden)
+            Slider(value: .constant(min(1, max(0, state.presentation.level))), in: 0...1)
+                .sliderThumbVisibility(.hidden)
         } else {
             Slider(value: .constant(min(1, max(0, state.presentation.level))), in: 0...1)
         }

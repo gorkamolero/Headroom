@@ -694,5 +694,19 @@
       "gammaAdjustment": "off",
       "note": "The current native brightness was preserved; no saved boost was re-enabled after the user changed the native setting during authentication."
     }
+  },
+  "candidate050Build15": {
+    "scope": "Visual-only correction, staged locally. Installed build14 remains running at the user request to avoid further permission prompts.",
+    "tickCount": 17,
+    "boundaryTickWidthPoints": 2,
+    "ordinaryTickHeightPoints": 8,
+    "boundaryTickHeightPoints": 12,
+    "duplicateBoundaryMarksRemoved": true,
+    "productionViewVisuallyInspected": true,
+    "releaseBuildAndDeepStrictSignaturePassed": true,
+    "brightnessControllerChanged": false,
+    "installedBuild": 14,
+    "runningInstalledKeyTapEnabled": true,
+    "newPermissionPromptsOpened": false
   }
 }
