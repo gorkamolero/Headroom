@@ -1,3 +1,11 @@
+# Headroom 0.5.0 — local candidate, build 21
+
+- Local updates can reuse one certificate-bound signing identity instead of resetting identity with every ad-hoc rebuild. The certificate's private key stays in Keychain; local configuration contains only its public fingerprint and refuses an ad-hoc fallback.
+- After the one-time permission transition, installing build 21 over signed build 20 retained the running app's brightness-key access without another prompt. Both apps have different code hashes and the same certificate-bound requirement.
+- Includes build 20's explicitly estimated nits readout. No brightness-control or HUD geometry changes.
+
+Build 21 is installed locally. This signing mode is not Developer ID signing or notarization; the public 0.4.0 release remains unchanged. See [local signing](RELEASING.md#persistent-signing-for-local-updates) and [validation](../VALIDATION.md).
+
 # Headroom 0.5.0 — local candidate, build 20
 
 - **Display +** now shows a calculated **≈… nits est.** readout in the overlay and per-display menu. It uses the live native nits reference and the table factor acknowledged by the recovery helper, with an explicitly assumed extended-sRGB response capped at live HDR capacity.

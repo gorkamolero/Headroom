@@ -28,6 +28,29 @@ To build only the app:
 
 Build scripts refuse to overwrite an existing app. Use a fresh output directory for another candidate, or deliberately move an earlier candidate after quitting it. Keep the running installation separate from release staging.
 
+## Persistent signing for local updates
+
+Ad-hoc signatures identify an individual build. Rebuilding changes that identity, so macOS can require Accessibility approval again. For a frequently updated local installation, create one code-signing certificate and private key in Keychain and reuse that identity for subsequent builds. A self-signed local certificate is sufficient for this workflow; it does not provide Developer ID signing or notarization.
+
+Find the certificate's exact 40-character SHA-1 fingerprint with `security find-identity -p codesigning`. Save that fingerprint once for local updates, replacing the placeholder below with the actual value:
+
+```sh
+mkdir -p "$HOME/Library/Application Support/Headroom Development"
+printf '%s\n' '<40-hex certificate fingerprint>' > \
+  "$HOME/Library/Application Support/Headroom Development/signing-identity"
+./scripts/build-menu-app.sh --local "$PWD/dist/local/Headroom.app"
+```
+
+The saved file contains only the fingerprint, with an optional final newline. It is read as data, never executed. An explicit `HEADROOM_SIGNING_IDENTITY` overrides this file and must itself be a valid 40-character fingerprint; an invalid or empty override fails instead of falling back. Only `--local` reads this configuration. Beta and Developer ID builds keep their explicit signing workflows.
+
+If the identity lives in a separate keychain, also set `HEADROOM_SIGNING_KEYCHAIN` to that existing keychain's absolute path. Keep the keychain unlocked for signing through macOS's normal controls. The build never creates identities, changes trust settings, or falls back to ad-hoc signing. It makes no timestamp request.
+
+Local mode signs the app and guardian with the same certificate and distinct identifiers. Each designated requirement binds the identifier to that exact certificate. Verification rejects code-hash-only and identifier-only requirements; knowing the bundle identifier is not sufficient to impersonate the app. Do not regenerate the certificate for each build, change the app identifier, or replace the private key during routine updates. Keep all keys and keychain files outside the repository and release archives.
+
+Moving from the existing ad-hoc installation to this persistent identity still requires one normal macOS approval. Later builds using the same certificate and designated requirement are intended to preserve that permission; verify the installed app's brightness-key access after updates. Changes to macOS policy or the signing identity may require a new approval. Do not edit the permission database or weaken signing requirements to avoid it.
+
+This mode is for local installations. Continue using the explicitly labelled beta or Developer ID workflows for public release packaging. A local certificate does not remove Gatekeeper checks for recipients.
+
 ## Optional future Developer ID candidate
 
 A configured **Developer ID Application** signing identity is required. With that identity already available in the signing keychain:

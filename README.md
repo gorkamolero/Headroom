@@ -74,7 +74,7 @@ Headroom runs locally. It has no telemetry, account system, network client, or a
 
 The 0.4.0 release needs no Accessibility permission. In the development version, brightness-key handling starts automatically and requires Accessibility; the menu controls work without it. It checks event codes to recognize brightness buttons. Other keys pass through unchanged; typed characters are never read or recorded.
 
-An update to an ad-hoc signed beta may require enabling Headroom in Accessibility again. These builds do not have a stable signing identity across versions; this is part of [macOS's app identity checks](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
+An update to an ad-hoc signed beta may require enabling Headroom in Accessibility again. These builds do not have a stable signing identity across versions; this is part of [macOS's app identity checks](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements). For frequent local updates, the [persistent local signing workflow](docs/RELEASING.md#persistent-signing-for-local-updates) reuses one certificate-bound identity. Moving to that identity needs one approval; routine updates should then preserve the grant, subject to macOS policy. Local signing is separate from public Developer ID signing and notarization.
 
 The app stores per-display slider preferences and local recovery data. Recovery records contain display identifiers and the original color tables; they are retained when recovery needs another attempt. See [local data and removal](docs/RECOVERY.md#local-data-and-removal).
 

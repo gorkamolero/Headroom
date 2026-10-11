@@ -5,12 +5,17 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage: scripts/build-menu-app.sh --beta [output.app]
+       scripts/build-menu-app.sh --local [output.app]
        HEADROOM_SIGNING_IDENTITY='Developer ID Application: Name (TEAMID)' \
          scripts/build-menu-app.sh --developer-id [output.app]
 
 --beta          Ad-hoc signature for local testing; not notarized.
+--local         Reuse a certificate-bound local identity; not notarized.
 --developer-id  Require a Developer ID Application identity and secure timestamp.
 
+HEADROOM_SIGNING_KEYCHAIN optionally selects an existing keychain for --local.
+For --local, HEADROOM_SIGNING_IDENTITY overrides the fingerprint saved in
+~/Library/Application Support/Headroom Development/signing-identity.
 Builds Apple silicon (arm64), with macOS 13 as the deployment target.
 USAGE
 }
@@ -18,7 +23,7 @@ USAGE
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 mode="${1:-}"
 case "$mode" in
-    --beta|--developer-id) shift ;;
+    --beta|--local|--developer-id) shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
 esac
@@ -41,6 +46,45 @@ if [[ "$mode" == --developer-id ]]; then
         exit 1
     }
     sign_args+=(--timestamp)
+elif [[ "$mode" == --local ]]; then
+    local_identity_config="$HOME/Library/Application Support/Headroom Development/signing-identity"
+    if [[ "${HEADROOM_SIGNING_IDENTITY+x}" == x ]]; then
+        # Explicit values, including empty or invalid ones, never fall back.
+        signing_identity="$HEADROOM_SIGNING_IDENTITY"
+    elif [[ -f "$local_identity_config" ]]; then
+        # This file contains data only. Never source it as shell code.
+        signing_identity="$(cat "$local_identity_config")"
+        # Permit a single final newline, but no ignored bytes or extra lines.
+        if ! printf '%s\n' "$signing_identity" | cmp -s - "$local_identity_config" && \
+           ! printf '%s' "$signing_identity" | cmp -s - "$local_identity_config"; then
+            printf 'The saved local signing identity must contain only one 40-hex certificate fingerprint.\n' >&2
+            exit 1
+        fi
+    else
+        signing_identity=""
+    fi
+    [[ "$signing_identity" =~ ^[[:xdigit:]]{40}$ ]] || {
+        printf 'Set HEADROOM_SIGNING_IDENTITY or save the exact 40-hex certificate fingerprint in %s. No ad-hoc fallback is permitted.\n' "$local_identity_config" >&2
+        exit 1
+    }
+    signing_identity="$(printf '%s' "$signing_identity" | tr '[:lower:]' '[:upper:]')"
+    identity_keychain_args=(-p codesigning)
+    if [[ -n "${HEADROOM_SIGNING_KEYCHAIN:-}" ]]; then
+        [[ -f "$HEADROOM_SIGNING_KEYCHAIN" ]] || {
+            printf 'HEADROOM_SIGNING_KEYCHAIN must name an existing keychain file.\n' >&2
+            exit 1
+        }
+        identity_keychain_args+=("$HEADROOM_SIGNING_KEYCHAIN")
+        sign_args+=(--keychain "$HEADROOM_SIGNING_KEYCHAIN")
+    fi
+    # An exact self-signed certificate can establish local code identity without
+    # adding a globally trusted root. The later checks verify its signature and DR.
+    local_identities="$(security find-identity "${identity_keychain_args[@]}")"
+    printf '%s\n' "$local_identities" | /usr/bin/grep -E "^[[:space:]]*[0-9]+\\) $signing_identity \"" >/dev/null || {
+        printf 'The requested local signing identity and private key are not available.\n' >&2
+        exit 1
+    }
+    sign_args+=(--timestamp=none)
 else
     # An inherited identity must not accidentally upload a timestamp request.
     sign_args+=(--timestamp=none)
@@ -75,7 +119,7 @@ cat > "$staged_app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>Headroom</string>
 <key>CFBundleDisplayName</key><string>Headroom</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>20</string>
+<key>CFBundleVersion</key><string>21</string>
 <key>CFBundleShortVersionString</key><string>0.5.0</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
@@ -103,8 +147,27 @@ carrier_bundle="$staged_app/Contents/Resources/HeadroomPrototype_DisplayActivati
 [[ -s "$carrier_bundle/Contents/Resources/black-hlg.mov" || -s "$carrier_bundle/black-hlg.mov" ]] || {
     printf 'The bundled HDR carrier is missing.\n' >&2; exit 1;
 }
-codesign "${sign_args[@]}" --sign "$signing_identity" "$staged_app/Contents/MacOS/DisplayGuardian"
-codesign "${sign_args[@]}" --sign "$signing_identity" "$staged_app"
+if [[ "$mode" == --local ]]; then
+    for signed_identifier in local.gorka.Headroom.DisplayGuardian local.gorka.Headroom; do
+        signed_item="$staged_app"
+        [[ "$signed_identifier" != local.gorka.Headroom.DisplayGuardian ]] || signed_item="$staged_app/Contents/MacOS/DisplayGuardian"
+        local_requirement="identifier \"$signed_identifier\" and certificate leaf = H\"$signing_identity\""
+        codesign "${sign_args[@]}" --sign "$signing_identity" --identifier "$signed_identifier" \
+            --requirements "=designated => $local_requirement" "$signed_item"
+        codesign --verify --strict --test-requirement "=$local_requirement" "$signed_item"
+        # Reject any unexpected default, code-hash-only, or identifier-only DR.
+        # Comparing the full canonical expression also rejects weaker OR clauses.
+        actual_requirement="$(codesign -d -r- "$signed_item" 2>&1 | sed -n 's/^designated => //p' | tr '[:upper:]' '[:lower:]')"
+        expected_requirement="$(printf '%s' "$local_requirement" | tr '[:upper:]' '[:lower:]')"
+        [[ "$actual_requirement" == "$expected_requirement" ]] || {
+            printf 'Local certificate-bound designated requirement verification failed: %s\n' "$signed_item" >&2
+            exit 1
+        }
+    done
+else
+    codesign "${sign_args[@]}" --sign "$signing_identity" "$staged_app/Contents/MacOS/DisplayGuardian"
+    codesign "${sign_args[@]}" --sign "$signing_identity" "$staged_app"
+fi
 codesign --verify --deep --strict --verbose=2 "$staged_app"
 if [[ "$mode" == --developer-id ]]; then
     for signed_item in "$staged_app" "$staged_app/Contents/MacOS/DisplayGuardian"; do
@@ -120,6 +183,8 @@ mv "$staged_app" "$app_path"
 printf 'Built: %s\n' "$app_path"
 if [[ "$mode" == --beta ]]; then
     printf 'Signature: ad-hoc community beta; not notarized.\n'
+elif [[ "$mode" == --local ]]; then
+    printf 'Signature: persistent local certificate identity; not Developer ID signed or notarized.\n'
 else
     printf 'Signature: Developer ID; notarization is still required before distribution.\n'
 fi
