@@ -191,6 +191,10 @@ INSTALL
    handling while Lunar is running to avoid conflicting display controls.
 5. Use the brightness keys, or click the black sun for each display's slider.
    Extra dimming and boost start OFF. The menu indicates unavailable controls.
+6. Open at Login is enabled automatically on first launch after installation.
+   Turn it off in the black-sun menu if unwanted; later launches respect that
+   choice. If approval is pending, select Allow in Login Items to open System
+   Settings and allow Headroom there. No daemon or separate startup helper is added.
 
 BRIGHTNESS CONTROLS
 Hold Brighter through normal hardware brightness and into extra brightness at

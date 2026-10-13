@@ -119,8 +119,8 @@ cat > "$staged_app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>Headroom</string>
 <key>CFBundleDisplayName</key><string>Headroom</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>21</string>
-<key>CFBundleShortVersionString</key><string>0.5.0</string>
+<key>CFBundleVersion</key><string>23</string>
+<key>CFBundleShortVersionString</key><string>0.5.1</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>

@@ -53,3 +53,12 @@ Build 20 shows **≈… nits est.** during boost, using `native nits × ((acknow
 The installed SDK headers were also checked for table range/sample count, EDR properties, and all-display ColorSync restoration behavior. These references describe API contracts. Actual test results and remaining checks are in [VALIDATION.md](VALIDATION.md).
 
 - [TN3127: Inside Code Signing: Requirements](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements) explains why ad-hoc identities change after rebuilding and why consistent designated requirements preserve privacy permissions. The community build binds both its identifier and exact signing certificate; it does not use an identifier-only requirement.
+
+## Open at Login — 0.5.1
+
+The menu uses the public macOS 13+ `SMAppService.mainApp` API. macOS owns the setting: `status` is checked when opening the menu and after each change; Headroom does not save a competing boolean. `register()` enables subsequent login launches, and `unregister()` removes registration without quitting the current app. Pending approval is shown separately and provides a user-initiated link to Login Items. No extra helper or LaunchAgent is installed.
+
+- [SMAppService.mainApp](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp)
+- [Register](https://developer.apple.com/documentation/servicemanagement/smappservice/register())
+- [Unregister](https://developer.apple.com/documentation/servicemanagement/smappservice/unregister())
+- [Approval status](https://developer.apple.com/documentation/servicemanagement/smappservice/status-swift.enum/requiresapproval)

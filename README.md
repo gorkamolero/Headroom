@@ -4,13 +4,13 @@
 
 A small macOS menu bar app for extra dimming and brighter everyday desktop content on compatible displays.
 
-**0.5.0 · Community beta**
+**0.5.1 · Community beta**
 
 Use your brightness keys across the normal display range, into extra dimming below it, and into HDR/EDR boost above it. Headroom keeps independent controls for each display in a compact black-sun menu. There is no main window, account, screen recording, or continuous video playback.
 
 ## Install
 
-1. Open [Releases](https://github.com/gorkamolero/Headroom/releases) and download **Headroom-0.5.0-community-beta-arm64.zip**.
+1. Open [Releases](https://github.com/gorkamolero/Headroom/releases) and download **Headroom-0.5.1-community-beta-arm64.zip**.
 2. Quit an older Headroom copy and other brightness-control utilities, including Lunar, before replacing or opening Headroom.
 3. Double-click the ZIP, drag **Headroom.app** into **Applications**, then open it there.
 
@@ -22,7 +22,7 @@ If macOS says the developer cannot be verified or Apple could not check the app:
 
 This saves an exception for Headroom. If **Open Anyway** is missing, try opening Headroom from Applications once more, then return to Privacy & Security; managed Macs may restrict this option. This is [Apple's per-app opening procedure](https://support.apple.com/102445). These steps apply to an unidentified-developer or unnotarized-app alert, not a damaged-app or malware alert.
 
-The 0.5.0 community build uses a persistent self-signed certificate. It is **not Developer ID signed or notarized**. **No compiling or Apple Developer membership is needed to use the downloaded app.**
+The 0.5.1 community build uses a persistent self-signed certificate. It is **not Developer ID signed or notarized**. **No compiling or Apple Developer membership is needed to use the downloaded app.**
 
 ### Allow brightness keys
 
@@ -37,6 +37,7 @@ Upgrading from an older ad-hoc signed build can require approving Headroom once 
 - **Returning to normal:** hold in the opposite direction. Headroom restores the saved color tables at the boundary, then continues adjusting normal brightness without a second press.
 - **Smaller steps:** hold **Option + Shift** with a brightness key.
 - **Per-display controls:** click the black sun, enable a display, and move its slider. Switch it off to restore that display's original color tables.
+- **Open at Login:** Headroom enables this automatically on its first launch after installation. Click the black sun and clear **Open at Login** to turn it off. Later launches respect your choice, including changes made in System Settings. If macOS needs approval, the menu shows a mixed state and **Allow in Login Items…**; select that row to open the relevant System Settings page.
 
 The indicator reads **Display −**, **Display**, or **Display +** for extra dimming, normal brightness, and boost. Its evenly spaced ticks mark the ranges. A held key pauses briefly at a boundary before continuing, making the transition easier to judge. Releasing and pressing again, or reversing direction, skips that pause.
 
@@ -72,7 +73,7 @@ Native-brightness control and nits reporting use small, isolated compatibility a
 
 ## Privacy and permissions
 
-Headroom runs locally, without telemetry, accounts, an app network client, or an automatic updater. It does not request Screen Recording, camera, microphone, or Full Disk Access permissions. It installs no login item or permanent background service.
+Headroom runs locally, without telemetry, accounts, an app network client, or an automatic updater. It does not request Screen Recording, camera, microphone, or Full Disk Access permissions. On first launch after installation, Headroom registers itself with macOS Login Items. This opens the app itself; it installs no daemon, LaunchAgent, or separate startup helper. You can turn **Open at Login** off in the menu, which reflects macOS's current setting. A local marker records that first-launch setup has run, so subsequent launches respect your choice.
 
 Accessibility permission enables brightness-key handling. Headroom checks event codes to recognize brightness buttons; other keys pass through unchanged, and typed characters are never read or recorded.
 

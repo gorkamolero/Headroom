@@ -42,6 +42,8 @@ The packaged 0.5.0 beta uses one persistent community signing certificate. When 
 
 ## Local data and removal
 
+If **Open at Login** is enabled, turn it off in Headroom’s menu before removing the app. You can also remove Headroom from macOS **System Settings → General → Login Items & Extensions**. This setting uses macOS registration and does not install a separate startup helper.
+
 Headroom saves per-display slider preferences in macOS user preferences. Its local support data is:
 
 | Location | Purpose |

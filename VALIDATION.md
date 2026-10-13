@@ -1,6 +1,6 @@
 # Validation
 
-Updated on 11 October 2026. This record separates the current menu app from the earlier Metal lab and separates API results from physical measurements. The repository contains a [sanitized results summary](docs/validation-results.json); raw local logs, device identifiers, and recovery tables are excluded.
+Updated on 12 October 2026. This record separates the current menu app from the earlier Metal lab and separates API results from physical measurements. The repository contains a [sanitized results summary](docs/validation-results.json); raw local logs, device identifiers, and recovery tables are excluded.
 
 ## Test environment
 
@@ -16,6 +16,14 @@ Updated on 11 October 2026. This record separates the current menu app from the 
 The deployment target is macOS 13. That is a build target, not evidence that every supported OS release has been tested. External displays, Intel Macs, and other Apple Silicon models have no recorded live pass.
 
 ## Completed checks
+
+### 0.5.1 community beta, build 23
+
+Adds the native **Open at Login** menu setting using `SMAppService.mainApp`. The installed production bundle reported `enabled` after an ordinary first launch, with the one-time setup marker saved. Its running brightness-key tap remained enabled across the build 21-to-22-to-23 updates using the same certificate identity; no Accessibility entry or permission database was changed.
+
+An isolated signed app in Applications exercised the exact production controller against macOS: first-launch registration enabled the login item and checked the menu item; disabling removed registration while the app stayed running; repeated setup and a new controller preserved the disabled choice. Explicit re-enabling, repeated enable/disable requests, and final unregistration also passed. The test app, registration, and temporary defaults were removed. This validates real registration and menu state; it is not a physical menu-click or future-login test.
+
+All **110 core tests** passed. Production compilation, deep/strict signature checks, and exact certificate requirements passed. The release archive preserves the installed app without rebuilding or re-signing it. No brightness-engine or indicator geometry code changed. Registration status and future login launch are distinct: no logout or reboot was performed for this update.
 
 ### 0.5.0 community beta, build 21
 

@@ -113,6 +113,7 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
     let recoveryNotice = NSTextField(wrappingLabelWithString:"")
     lazy var brightnessKeys = BrightnessKeyController { [weak self] in Array(self?.sessions.values ?? [:].values) }
     var keysStatusItem: NSMenuItem?
+    let openAtLogin = OpenAtLoginController()
     private var menuIsOpen = false
 
     func applicationDidFinishLaunching(_ notification:Notification){
@@ -163,6 +164,7 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
             if self.terminating && !self.sessions.values.contains(where:{$0.busy}) {NSApp.reply(toApplicationShouldTerminate:true)}
         }
         timer = t;RunLoop.main.add(t,forMode:.common)
+        openAtLogin.configureOnFirstLaunch()
         // Explicit restart handoff only; ordinary launches always remain off.
         if let option = CommandLine.arguments.firstIndex(of:"--resume-display"), CommandLine.arguments.indices.contains(option+1),
            let session = sessions[CommandLine.arguments[option+1]] {session.start()}
@@ -172,8 +174,9 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         RunLoop.main.perform(inModes:[.default]) {self.show()}
         return false
     }
-    func menuWillOpen(_ menu:NSMenu) {menuIsOpen = true;reconcile();print("{\"event\":\"menu-open\"}");fflush(stdout)}
+    func menuWillOpen(_ menu:NSMenu) {menuIsOpen = true;openAtLogin.refresh();reconcile();print("{\"event\":\"menu-open\"}");fflush(stdout)}
     func menuDidClose(_ menu:NSMenu) {menuIsOpen = false;print("{\"event\":\"menu-close\"}");fflush(stdout)}
+    func applicationDidBecomeActive(_ notification: Notification) { openAtLogin.refresh() }
     func recoverDisconnectedJournals(){
         guard let dirs = try? FileManager.default.contentsOfDirectory(at:recoveryRoot,includingPropertiesForKeys:nil) else{return}
         var pending = 0
@@ -263,6 +266,9 @@ final class HeadroomDelegate:NSObject,NSApplicationDelegate,NSMenuDelegate {
         let keyStatus = NSMenuItem(title:"",action:#selector(openKeyPermissions),keyEquivalent:"")
         keyStatus.target = self;menu.addItem(keyStatus);keysStatusItem = keyStatus
         updateKeyMenu()
+        openAtLogin.refresh()
+        menu.addItem(openAtLogin.menuItem)
+        menu.addItem(openAtLogin.approvalItem)
         let more = NSMenuItem(title:"More",action:nil,keyEquivalent:"")
         let details = NSMenu();details.autoenablesItems = false
         let about = NSMenuItem(title:"About Headroom…",action:#selector(showInfo),keyEquivalent:"")
@@ -352,6 +358,7 @@ if CommandLine.arguments.contains("--diagnose-brightness-keys") {
     // GUI's enabled event tap is stronger evidence than this process's AX bit.
     let report: [String:Any] = ["diagnosticProcessAccessibility": AXIsProcessTrusted(),
         "runningAppBrightnessTapEnabled": activeTap,
+        "openAtLogin": OpenAtLoginController.statusDescription,
         "brightnessIndicator": "appKitGlassPanel", "displays": displays]
     if let data = try? JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]) {
         print(String(decoding:data,as:UTF8.self))

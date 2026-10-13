@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "recordedDate": "2026-10-11",
-  "scope": "Sanitized build-specific development and packaging results for the 0.5.0 community beta, retaining earlier historical evidence; not hardware certification.",
+  "recordedDate": "2026-10-12",
+  "scope": "Sanitized build-specific development and packaging results through the 0.5.1 community beta; not hardware certification.",
   "environment": {
     "chip": "Apple M5 Pro",
     "display": "Built-in Liquid Retina XDR",
@@ -1008,5 +1008,23 @@
     "sourceBuildRequiresSDK": "macOS 26 / Xcode 26 or later",
     "physicalLuminanceMeasured": false,
     "scope": "Release archive audit and repeated unit tests. Publication and destination installation are separate delivery steps."
+  },
+  "localBuild23": {
+    "version": "0.5.1",
+    "build": 23,
+    "date": "2026-10-12",
+    "coreTestsPassed": 110,
+    "firstLaunchControllerIntegrationPassed": true,
+    "disabledChoicePreservedAcrossControllerRecreation": true,
+    "menuStateMatchesSystemRegistration": true,
+    "testRegistrationRemoved": true,
+    "productionOpenAtLogin": "enabled",
+    "productionBrightnessKeyTapEnabled": true,
+    "accessibilityPermissionRefreshed": false,
+    "additionalStartupDaemonInstalled": false,
+    "futureLoginPhysicallyTested": false,
+    "archiveSHA256": "608b5ff8948bea6f00c037b1fb9ca06112e2d6949f5287b5c0ec82c2d794210e",
+    "archiveMatchesInstalledApp": true,
+    "deepStrictSignaturesPassed": true
   }
 }

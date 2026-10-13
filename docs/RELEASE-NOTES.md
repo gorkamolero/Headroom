@@ -1,3 +1,15 @@
+# Headroom 0.5.1 — community beta
+
+Build 23 enables **Open at Login** automatically on the first launch after installation. The black-sun menu includes a checkbox to turn it off.
+
+- Uses macOS Login Items to open Headroom itself, with no daemon, LaunchAgent, or separate startup helper.
+- The checkbox reflects the current macOS setting. One-time setup does not re-enable it on later launches after you turn it off in the menu or System Settings.
+- If approval is pending, the checkbox shows a mixed state and **Allow in Login Items…** opens the relevant settings. Turning the checkbox off cancels the request.
+
+Download **Headroom-0.5.1-community-beta-arm64.zip**, quit the existing app, and replace **Headroom.app** in **Applications**. Follow the [installation instructions](../README.md#install) if macOS blocks the first opening. This release retains the persistent self-signed identity; it is not Developer ID signed or notarized. Brightness-key access still uses the normal Accessibility permission.
+
+Display adjustment remains off on launch. The brightness controls, restoration behavior, and uncalibrated nits estimates from 0.5.0 are unchanged. [Validation](../VALIDATION.md) records completed checks separately from release preparation.
+
 # Headroom 0.5.0 — community beta
 
 Brightness keys now move continuously through extra dimming, normal brightness, and HDR/EDR boost. Hold a key to cross ranges without releasing and pressing again; the indicator briefly pauses at each boundary and labels the current range **Display −**, **Display**, or **Display +**.

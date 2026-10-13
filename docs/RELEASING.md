@@ -1,17 +1,19 @@
 # Building and releasing Headroom
 
-Headroom 0.5.0 is a community beta for Apple Silicon. The build targets macOS 13 or later; [validation](../VALIDATION.md) describes the systems and builds actually tested. Users install the packaged app directly; building from source is optional. Source builds require **Xcode 26 or later with the macOS 26 SDK**, even though the deployment target remains macOS 13.
+Headroom 0.5.1 is a community beta for Apple Silicon. The build targets macOS 13 or later; [validation](../VALIDATION.md) describes the systems and builds actually tested. Users install the packaged app directly; building from source is optional. Source builds require **Xcode 26 or later with the macOS 26 SDK**, even though the deployment target remains macOS 13.
+
+The **Open at Login** menu setting uses `SMAppService.mainApp` on macOS 13 or later. Headroom automatically registers itself on its first launch after installation; copying the ZIP app into Applications alone cannot run this setup. Users can turn it off in the menu. macOS registration status remains authoritative. A local marker records only that first-launch setup has run, so later launches respect a disabled setting or changes made in System Settings. No daemon, LaunchAgent, or separate startup helper is installed. Pending approval appears as a mixed checkbox with **Allow in Login Items…**, which opens System Settings. Verify first-launch registration, disabling, subsequent launches, and status refresh in the installed candidate before recording this feature as live-tested.
 
 ## Package the verified community build
 
-The 0.5.0 release preserves the persistent certificate-bound identity of the verified app. It is self-signed, not Developer ID signed or notarized. Package the exact approved installation rather than rebuilding it with an ad-hoc signature:
+The 0.5.1 release preserves the persistent certificate-bound identity of the verified app. It is self-signed, not Developer ID signed or notarized. Package the exact approved installation rather than rebuilding it with an ad-hoc signature:
 
 ```sh
 ./scripts/package-release.sh --community-signed \
-  /Applications/Headroom.app dist/release-0.5.0
+  /Applications/Headroom.app dist/release-0.5.1
 ```
 
-The output is **Headroom-0.5.0-community-beta-arm64.zip** and its matching **.zip.sha256** checksum in `dist/release-0.5.0`. The ZIP contains `Headroom.app` and `READ-ME.txt`, with no source, logs, recovery journals, or signing credentials. This mode verifies the supplied app's certificate-bound signing identity and packages it without changing that identity. It reads the expected public fingerprint from `HEADROOM_SIGNING_IDENTITY` or the saved configuration described below; packaging needs neither the private key nor an unlocked signing keychain.
+The output is **Headroom-0.5.1-community-beta-arm64.zip** and its matching **.zip.sha256** checksum in `dist/release-0.5.1`. The ZIP contains `Headroom.app` and `READ-ME.txt`, with no source, logs, recovery journals, or signing credentials. This mode verifies the supplied app's certificate-bound signing identity and packages it without changing that identity. It reads the expected public fingerprint from `HEADROOM_SIGNING_IDENTITY` or the saved configuration described below; packaging needs neither the private key nor an unlocked signing keychain.
 
 Recipients follow the [installation instructions](../README.md#install), including macOS's per-app **Open Anyway** action when needed. Brightness keys require Accessibility permission. An upgrade from an earlier ad-hoc build can require one fresh approval; subsequent updates must retain the same certificate and designated requirement to preserve the app's identity.
 
@@ -19,13 +21,13 @@ For installation on another Mac, use the app extracted from this same release ZI
 
 ## Source archive
 
-The optional **Headroom-0.5.0-source.zip** contains the committed source, icon assets, tests, and documentation. Create it only after the final release changes are committed and the checkout is clean:
+The optional **Headroom-0.5.1-source.zip** contains the committed source, icon assets, tests, and documentation. Create it only after the final release changes are committed and the checkout is clean:
 
 ```sh
-git archive --format=zip --prefix=Headroom-0.5.0/ HEAD \
-  > dist/release-0.5.0/Headroom-0.5.0-source.zip
-(cd dist/release-0.5.0 && shasum -a 256 Headroom-0.5.0-source.zip \
-  > Headroom-0.5.0-source.zip.sha256)
+git archive --format=zip --prefix=Headroom-0.5.1/ HEAD \
+  > dist/release-0.5.1/Headroom-0.5.1-source.zip
+(cd dist/release-0.5.1 && shasum -a 256 Headroom-0.5.1-source.zip \
+  > Headroom-0.5.1-source.zip.sha256)
 ```
 
 Use that same commit for the release tag. Raw display evidence, build caches, and signing keys stay outside the archive. Never share a keychain or certificate private key with recipients.
@@ -89,7 +91,7 @@ After configuring an Apple notarization keychain profile, pass its name:
 ./scripts/notarize-release.sh "$PWD/dist/Headroom.app" KEYCHAIN_PROFILE dist
 ```
 
-This step uploads the signed candidate to Apple's notary service. The script requires an accepted result, staples the ticket, verifies it, and performs a Gatekeeper assessment before producing `Headroom-0.5.0-notarized-arm64.zip` and its `.zip.sha256` checksum. Submission needs the maintainer's Apple credentials; a successful ad-hoc build cannot substitute for them.
+This step uploads the signed candidate to Apple's notary service. The script requires an accepted result, staples the ticket, verifies it, and performs a Gatekeeper assessment before producing `Headroom-0.5.1-notarized-arm64.zip` and its `.zip.sha256` checksum. Submission needs the maintainer's Apple credentials; a successful ad-hoc build cannot substitute for them.
 
 Apple's [notarization documentation](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) explains the Developer ID, hardened runtime, and secure timestamp requirements. [Customizing the notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow) covers command-line submission and stapling.
 
@@ -97,6 +99,6 @@ Before publishing, test the final downloaded artifact through normal Gatekeeper 
 
 ## Release choice
 
-The maintainer has chosen a community beta and optional source archive without an Apple Developer Program membership. The 0.5.0 binary uses a persistent self-signed certificate. Developer ID signing and notarization are not part of this release; their scripts remain available if that distribution choice changes later.
+The maintainer has chosen a community beta and optional source archive without an Apple Developer Program membership. The 0.5.1 binary uses a persistent self-signed certificate. Developer ID signing and notarization are not part of this release; their scripts remain available if that distribution choice changes later.
 
 Keep the signing status and compatibility limits visible when sharing. Record publication only after the remote release and all assets have been verified, and install the exact packaged artifact on any destination Mac.
